@@ -78,8 +78,13 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     PutVarint32(dst, new_files_[i].first);  // level
     PutVarint64(dst, f.number);
     PutVarint64(dst, f.file_size);
-    PutLengthPrefixedSlice(dst, f.smallest.Encode());
-    PutLengthPrefixedSlice(dst, f.largest.Encode());
+    PutVarint32(dst, f.table_number);
+    PutVarint32(dst, f.smallest.size());
+    for (int i = 0; i < f.smallest.size(); ++ i)
+      PutLengthPrefixedSlice(dst, f.smallest[i].Encode());
+    PutVarint32(dst, f.largest.size());
+    for (int i = 0; i < f.largest.size(); ++ i)
+      PutLengthPrefixedSlice(dst, f.largest[i].Encode());
   }
 }
 
@@ -90,6 +95,19 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
   } else {
     return false;
   }
+}
+
+static bool GetSeveralInternalKey(Slice* input, std::vector<InternalKey*> dst) {
+  size_t size = 0;
+  GetVarint32(&dst, &size);
+  for (size_t i = 0; i < size; ++ i) {
+    InternalKey* key;
+    if (GetInternalKey(&input, &key))
+      dst.push_back(key);
+    else
+      return false;
+  }
+  return true;
 }
 
 static bool GetLevel(Slice* input, int* level) {
@@ -176,9 +194,10 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
 
       case kNewFile:
         if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
-            GetVarint64(&input, &f.file_size) &&
-            GetInternalKey(&input, &f.smallest) &&
-            GetInternalKey(&input, &f.largest)) {
+            GetVarint64(&input, &f.file_size) && 
+            GetVarint32(&input, &f.table_number) &&
+            GetSeveralInternalKey(&input, &f.smallest) &&
+            GetSeveralInternalKey(&input, &f.largest)) {
           new_files_.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";
@@ -246,9 +265,18 @@ std::string VersionEdit::DebugString() const {
     r.append(" ");
     AppendNumberTo(&r, f.file_size);
     r.append(" ");
-    r.append(f.smallest.DebugString());
-    r.append(" .. ");
-    r.append(f.largest.DebugString());
+    AppendNumberTo(&r, f.table_number);
+    r.append(" ");
+    assert(f.smallest.size() == f.largest.size());
+    AppendNumberTo(&r, f.smallest.size());
+    r.append(" ");
+    for (size_t i = 0; i < f.smallest.size(); ++ i) {
+      r.append("[")
+      r.append(f.smallest[i].DebugString());
+      r.append(" .. ");
+      r.append(f.largest[i].DebugString());
+      r.append("]")
+    }
   }
   r.append("\n}\n");
   return r;

@@ -54,7 +54,7 @@ class Repairer {
         owns_cache_(options_.block_cache != options.block_cache),
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
-    table_cache_ = new TableCache(dbname_, options_, 10);
+    table_cache_ = new TableCache(dbname_, options_, 10, options_.comparator);
   }
 
   ~Repairer() {
@@ -229,7 +229,8 @@ class Repairer {
     // on checksum verification.
     ReadOptions r;
     r.verify_checksums = options_.paranoid_checks;
-    return table_cache_->NewIterator(r, meta.number, meta.file_size);
+    return table_cache_->NewIterator(r, meta.number, meta.file_size, 
+                                      meta.table_number);
   }
 
   void ScanTable(uint64_t number) {
@@ -270,9 +271,9 @@ class Repairer {
       counter++;
       if (empty) {
         empty = false;
-        t.meta.smallest.DecodeFrom(key);
+        t.meta.smallest[0].DecodeFrom(key);
       }
-      t.meta.largest.DecodeFrom(key);
+      t.meta.largest[0].DecodeFrom(key);
       if (parsed.sequence > t.max_sequence) {
         t.max_sequence = parsed.sequence;
       }
@@ -368,8 +369,8 @@ class Repairer {
     for (size_t i = 0; i < tables_.size(); i++) {
       // TODO(opt): separate out into multiple levels
       const TableInfo& t = tables_[i];
-      edit_.AddFile(0, t.meta.number, t.meta.file_size, t.meta.smallest,
-                    t.meta.largest);
+      edit_.AddFile(0, t.meta.number, t.meta.file_size, t.meta.smallest[0],
+                    t.meta.largest[0]);
     }
 
     // fprintf(stderr, "NewDescriptor:\n%s\n", edit_.DebugString().c_str());

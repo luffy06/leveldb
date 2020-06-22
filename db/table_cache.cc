@@ -13,12 +13,13 @@ namespace leveldb {
 
 struct TableAndFile {
   RandomAccessFile* file;
-  Table* table;
+  std::vector<Table*> tables;
 };
 
 static void DeleteEntry(const Slice& key, void* value) {
   TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
-  delete tf->table;
+  for (int i = 0; i < tf->tables.size(); ++ i)
+    delete tf->tables[i];
   delete tf->file;
   delete tf;
 }
@@ -39,7 +40,7 @@ TableCache::TableCache(const std::string& dbname, const Options& options,
 TableCache::~TableCache() { delete cache_; }
 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
-                             Cache::Handle** handle) {
+                             uint32_t table_number, Cache::Handle** handle) {
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
@@ -48,7 +49,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   if (*handle == nullptr) {
     std::string fname = TableFileName(dbname_, file_number);
     RandomAccessFile* file = nullptr;
-    Table* table = nullptr;
+    std::vector<Table*> tables;
     s = env_->NewRandomAccessFile(fname, &file);
     if (!s.ok()) {
       std::string old_fname = SSTTableFileName(dbname_, file_number);
@@ -57,18 +58,19 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
-      s = Table::Open(options_, file, file_size, &table);
+      s = Table::Open(options_, file, file_size, table_number, &tables);
     }
 
     if (!s.ok()) {
-      assert(table == nullptr);
+      for (int i = 0; i < tables.size(); ++ i)
+        assert(tables[i] == nullptr);
       delete file;
       // We do not cache error results so that if the error is transient,
       // or somebody repairs the file, we recover automatically.
     } else {
       TableAndFile* tf = new TableAndFile;
       tf->file = file;
-      tf->table = table;
+      tf->tables = tables;
       *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
     }
   }
@@ -76,36 +78,50 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 }
 
 Iterator* TableCache::NewIterator(const ReadOptions& options,
-                                  uint64_t file_number, uint64_t file_size,
-                                  Table** tableptr) {
-  if (tableptr != nullptr) {
-    *tableptr = nullptr;
+                                  uint64_t file_number, uint64_t file_size, 
+                                  uint32_t table_number, Table*** tableptr) {
+  for (size_t i = 0; i < table_number; ++ i) {
+    if (tableptr[i] != nullptr)
+      *(tableptr[i]) = nullptr;
   }
 
   Cache::Handle* handle = nullptr;
-  Status s = FindTable(file_number, file_size, &handle);
+  Status s = FindTable(file_number, file_size, table_number, &handle);
   if (!s.ok()) {
     return NewErrorIterator(s);
   }
-
-  Table* table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
-  Iterator* result = table->NewIterator(options);
-  result->RegisterCleanup(&UnrefEntry, cache_, handle);
-  if (tableptr != nullptr) {
-    *tableptr = table;
+  std::vector<Table*> tables = reinterpret_cast<TableAndFile*>(
+                                                cache_->Value(handle))->tables;
+  std::vector<Iterator*> table_iterators;
+  for (int i = 0; i < tables.size(); ++ i) {
+    table_iterators.push_back(tables[i]->NewIterator(options));
+    tables[i]->RegisterCleanup(&UnrefEntry, cache_, handle);
+  }
+  // TODO(floating): Verify that whether the key is encoded with sequence number
+  Iterator* result = new MergeIterator(options_.comparator, &table_iterators[0], 
+                                      table_iterators.size());
+  for (size_t i = 0; i < tables.size(); ++ i) {
+    *(tableptr[i]) = tables[i];
   }
   return result;
 }
 
 Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
-                       uint64_t file_size, const Slice& k, void* arg,
+                       uint64_t file_size, uint32_t table_number, 
+                       const Slice& k, void* arg,
                        void (*handle_result)(void*, const Slice&,
                                              const Slice&)) {
   Cache::Handle* handle = nullptr;
-  Status s = FindTable(file_number, file_size, &handle);
+  Status s = FindTable(file_number, file_size, table_number, &handle);
   if (s.ok()) {
-    Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
-    s = t->InternalGet(options, k, arg, handle_result);
+    std::vector<Table*> t_list = reinterpret_cast<TableAndFile*>(
+                                                cache_->Value(handle))->tables;
+    for (int i = 0; i < t_list.size(); ++ i) {
+      // TODO(floating): process it based on the range 
+      s = t_list[i]->InternalGet(options, k, arg, handle_result);
+      if (s.ok()) // DEBUG: verify the condition
+        break;
+    }
     cache_->Release(handle);
   }
   return s;

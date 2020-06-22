@@ -36,46 +36,51 @@ struct Table::Rep {
 };
 
 Status Table::Open(const Options& options, RandomAccessFile* file,
-                   uint64_t size, Table** table) {
-  *table = nullptr;
-  if (size < Footer::kEncodedLength) {
+                   uint64_t size, uint32_t table_number, 
+                   std::vector<Table*> tables) {
+  if (size < FooterList::encoded_length(table_number)) {
     return Status::Corruption("file is too short to be an sstable");
   }
 
-  char footer_space[Footer::kEncodedLength];
-  Slice footer_input;
-  Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
-                        &footer_input, footer_space);
+  int footerlist_size = FooterList::encoded_length(table_number);
+  char footerlist_space[footerlist_size];
+  Slice footerlist_input;
+  Status s = file->Read(size - footerlist_size, footerlist_size,
+                        &footerlist_input, footerlist_space);
   if (!s.ok()) return s;
 
-  Footer footer;
-  s = footer.DecodeFrom(&footer_input);
+  FooterList footerlist;
+  s = footerlist.DecodeFrom(&footerlist_input);
   if (!s.ok()) return s;
 
   // Read the index block
-  BlockContents index_block_contents;
-  if (s.ok()) {
-    ReadOptions opt;
-    if (options.paranoid_checks) {
-      opt.verify_checksums = true;
+  for (size_t i = 0; i < table_number; ++ i) {
+    Footer footer = footerlist.get(i);
+    BlockContents index_block_contents;
+    if (s.ok()) {
+      ReadOptions opt;
+      if (options.paranoid_checks) {
+        opt.verify_checksums = true;
+      }
+      s = ReadBlock(file, opt, footer.index_handle(), &index_block_contents);
     }
-    s = ReadBlock(file, opt, footer.index_handle(), &index_block_contents);
-  }
 
-  if (s.ok()) {
-    // We've successfully read the footer and the index block: we're
-    // ready to serve requests.
-    Block* index_block = new Block(index_block_contents);
-    Rep* rep = new Table::Rep;
-    rep->options = options;
-    rep->file = file;
-    rep->metaindex_handle = footer.metaindex_handle();
-    rep->index_block = index_block;
-    rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
-    rep->filter_data = nullptr;
-    rep->filter = nullptr;
-    *table = new Table(rep);
-    (*table)->ReadMeta(footer);
+    if (s.ok()) {
+      // We've successfully read the footer and the index block: we're
+      // ready to serve requests.
+      Block* index_block = new Block(index_block_contents);
+      Rep* rep = new Table::Rep;
+      rep->options = options;
+      rep->file = file;
+      rep->metaindex_handle = footer.metaindex_handle();
+      rep->index_block = index_block;
+      rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
+      rep->filter_data = nullptr;
+      rep->filter = nullptr;
+      Table* table = new Table(rep);
+      table->ReadMeta(footer);
+      tables.push_back(table)
+    }    
   }
 
   return s;
@@ -243,12 +248,13 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
   return s;
 }
 
-uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
+uint64_t Table::ApproximateOffsetOf(const Slice& key, bool& found) const {
   Iterator* index_iter =
       rep_->index_block->NewIterator(rep_->options.comparator);
   index_iter->Seek(key);
   uint64_t result;
   if (index_iter->Valid()) {
+    found = true;
     BlockHandle handle;
     Slice input = index_iter->value();
     Status s = handle.DecodeFrom(&input);
@@ -264,6 +270,7 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
     // key is past the last key in the file.  Approximate the offset
     // by returning the offset of the metaindex block (which is
     // right near the end of the file).
+    found = false;
     result = rep_->metaindex_handle.offset();
   }
   delete index_iter;

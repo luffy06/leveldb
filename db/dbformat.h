@@ -44,6 +44,9 @@ static const int kMaxMemCompactLevel = 2;
 // Approximate gap in bytes between samples of data read during iteration.
 static const int kReadBytesPeriod = 1048576;
 
+// Maximum number of visit queue
+static const int kNumVisitQueue = 100000;
+
 }  // namespace config
 
 class InternalKey;

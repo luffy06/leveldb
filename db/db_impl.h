@@ -101,6 +101,21 @@ class DBImpl : public DB {
     int64_t bytes_written;
   };
 
+  // TODO(floating): Annotation
+  struct FlotationStats {
+    FlotationStats() : micros(0), bytes_read(0), bytes_written(0) {}
+
+    void Add(const FlotationStats& c) {
+      this->micros += c.micros;
+      this->bytes_read += c.bytes_read;
+      this->bytes_written += c.bytes_written;
+    }
+
+    int64_t micros;
+    int64_t bytes_read;
+    int64_t bytes_written;    
+  };
+
   Iterator* NewInternalIterator(const ReadOptions&,
                                 SequenceNumber* latest_snapshot,
                                 uint32_t* seed);
@@ -149,6 +164,17 @@ class DBImpl : public DB {
   Status OpenCompactionOutputFile(CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact)
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
+  Status DoFlotationWork(FlotationState* floating)
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
+  void GetFlotationInteratorRange(Iterator* iter, std::vector<bool> deleted, 
+                          InternalKey& smallest, InternalKey& largest);
+  Status OpenFlotationAppendFile(FlotationState* floating, 
+                                uint64_t file_number, uint64_t offset);
+  Status FinishFlotationAppendFile(FlotationState* floating, Iterator* input);
+  Status InstallFlotationResults(FlotationState* floating)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   const Comparator* user_comparator() const {
@@ -202,7 +228,8 @@ class DBImpl : public DB {
   // Have we encountered a background error in paranoid mode?
   Status bg_error_ GUARDED_BY(mutex_);
 
-  CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);
+  CompactionStats stats_c_[config::kNumLevels] GUARDED_BY(mutex_);
+  FlotationStats stats_f_[config::kNumLevels] GUARDED_BY(mutex_);
 };
 
 // Sanitize db options.  The caller should delete result.info_log if

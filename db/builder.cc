@@ -29,12 +29,15 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
     }
 
     TableBuilder* builder = new TableBuilder(options, file);
-    meta->smallest.DecodeFrom(iter->key());
+    InternalKey smallest, largest;
+    smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
-      meta->largest.DecodeFrom(key);
+      largest.DecodeFrom(key);
       builder->Add(key, iter->value());
     }
+    meta->smallest.push_back(smallest);
+    meta->largest.push_back(largest);
 
     // Finish and check for builder errors
     s = builder->Finish();
@@ -57,7 +60,8 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
     if (s.ok()) {
       // Verify that the table is usable
       Iterator* it = table_cache->NewIterator(ReadOptions(), meta->number,
-                                              meta->file_size);
+                                              meta->file_size, 
+                                              meta->table_number);
       s = it->status();
       delete it;
     }

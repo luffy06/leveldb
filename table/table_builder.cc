@@ -195,6 +195,18 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
 
 Status TableBuilder::status() const { return rep_->status; }
 
+Status TableBuilder::InitialFooter(BlockHandle metaindex_block_handle, 
+                                    BlockHandle index_block_handle,
+                                    std::string& footer_encoding) {
+  FooterList footer_list;
+  Footer footer;
+  footer.set_metaindex_handle(metaindex_block_handle);
+  footer.set_index_handle(index_block_handle);
+  footer_list.append_new_footer(footer)
+  footer_list.EncodeTo(&footer_encoding);
+  return Status();
+}
+
 Status TableBuilder::Finish() {
   Rep* r = rep_;
   Flush();
@@ -239,11 +251,12 @@ Status TableBuilder::Finish() {
 
   // Write footer
   if (ok()) {
-    Footer footer;
-    footer.set_metaindex_handle(metaindex_block_handle);
-    footer.set_index_handle(index_block_handle);
     std::string footer_encoding;
-    footer.EncodeTo(&footer_encoding);
+    r->status = InitialFooter(metaindex_block_handle, index_block_handle, 
+                              footer_encoding);
+    if (!r->status.ok()) {
+      return r->status;
+    }
     r->status = r->file->Append(footer_encoding);
     if (r->status.ok()) {
       r->offset += footer_encoding.size();

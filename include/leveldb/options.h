@@ -114,6 +114,9 @@ struct LEVELDB_EXPORT Options {
   // initially populating a large database.
   size_t max_file_size = 2 * 1024 * 1024;
 
+  // TODO(floating): Need annotation
+  size_t max_file_size_ready_to_merge = 4 * 1024 * 1024;
+
   // Compress blocks using the specified compression algorithm.  This
   // parameter can be changed dynamically.
   //

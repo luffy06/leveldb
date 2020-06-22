@@ -51,7 +51,7 @@ class Footer {
   // Encoded length of a Footer.  Note that the serialization of a
   // Footer will always occupy exactly this many bytes.  It consists
   // of two block handles and a magic number.
-  enum { kEncodedLength = 2 * BlockHandle::kMaxEncodedLength + 8 };
+  enum { kEncodedLength = 2 * BlockHandle::kMaxEncodedLength };
 
   Footer() = default;
 
@@ -71,6 +71,32 @@ class Footer {
   BlockHandle index_handle_;
 };
 
+class FooterList {
+ public:
+  FooterList() = default;
+
+  void append_new_footer(const Footer& f) { handle_list.push_back(f); }
+
+  static uint32_t encoded_length(uint32_t table_number) { 
+    return table_number * Footer::kEncodedLength + 8; 
+  }
+
+  uint32_t encoded_length() { 
+    return handle_list.size() * Footer::kEncodedLength + 8; 
+  }
+
+  const Footer get(int i) { return handle_list[i]; }
+
+  uint32_t size() { return handle_list.size(); }
+
+  void EncodeTo(std::string* dst) const;
+  Status DecodeFrom(Slice* input);
+
+ private:
+  std::vector<Footer> handle_list;
+  //first ->meta_index_handle_ second -> index_handle;
+//  BlockHandle index_handle_;
+};
 // kTableMagicNumber was picked by running
 //    echo http://code.google.com/p/leveldb/ | sha1sum
 // and taking the leading 64 bits.

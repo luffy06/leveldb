@@ -15,6 +15,7 @@ namespace leveldb {
 class Block;
 class BlockHandle;
 class Footer;
+class FooterList;
 struct Options;
 class RandomAccessFile;
 struct ReadOptions;
@@ -48,7 +49,10 @@ class LEVELDB_EXPORT Table {
   // Returns a new iterator over the table contents.
   // The result of NewIterator() is initially invalid (caller must
   // call one of the Seek methods on the iterator before using it).
-  Iterator* NewIterator(const ReadOptions&) const;
+  Iterator* NewIterator(const ReadOptions&, bool&) const;
+
+  // Merge the iterator with a new iterator over the table contents.
+  void MergeIterator(const ReadOptions&, Iterator* iter) const;
 
   // Given a key, return an approximate byte offset in the file where
   // the data for that key begins (or would begin if the key were
@@ -56,7 +60,7 @@ class LEVELDB_EXPORT Table {
   // bytes, and so includes effects like compression of the underlying data.
   // E.g., the approximate offset of the last key in the table will
   // be close to the file length.
-  uint64_t ApproximateOffsetOf(const Slice& key) const;
+  uint64_t ApproximateOffsetOf(const Slice& key, bool& found) const;
 
  private:
   friend class TableCache;

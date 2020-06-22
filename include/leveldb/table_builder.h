@@ -83,6 +83,9 @@ class LEVELDB_EXPORT TableBuilder {
   bool ok() const { return status().ok(); }
   void WriteBlock(BlockBuilder* block, BlockHandle* handle);
   void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
+  Status InitialFooter(BlockHandle metaindex_block_handle, 
+                        BlockHandle index_block_handle,
+                        std::string& footer_encoding);
 
   struct Rep;
   Rep* rep_;

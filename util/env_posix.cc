@@ -248,8 +248,8 @@ class PosixMmapReadableFile final : public RandomAccessFile {
 
 class PosixWritableFile final : public WritableFile {
  public:
-  PosixWritableFile(std::string filename, int fd)
-      : pos_(0),
+  PosixWritableFile(std::string filename, int fd, size_t pos = 0)
+      : pos_(pos),
         fd_(fd),
         is_manifest_(IsManifest(filename)),
         filename_(std::move(filename)),

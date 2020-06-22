@@ -57,6 +57,23 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            const Slice* smallest_user_key,
                            const Slice* largest_user_key);
 
+// VisitQueue is a queue which is implemented by a recurrent array.
+class VisitQueue {
+ public:
+  VisitQueue() : start_index_(-1), end_index_(-1) {}
+
+  bool Full() { return Length() == kNumVisitQueue; }
+
+  int Length();
+
+  std::string Add(size_t level, uint64_t file_number);
+
+ private:
+  std::string number_queue_[config::kNumVisitQueue + 1];
+  int start_index_;
+  int end_index_;
+};
+
 class Version {
  public:
   // Lookup the value for key.  If found, store it in *val and
@@ -125,6 +142,7 @@ class Version {
         next_(this),
         prev_(this),
         refs_(0),
+        visit_queue_(new VisitQueue())
         file_to_compact_(nullptr),
         file_to_compact_level_(-1),
         compaction_score_(-1),
@@ -145,6 +163,8 @@ class Version {
   void ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
                           bool (*func)(void*, int, FileMetaData*));
 
+  void UpdateFrequency(size_t level, uint64_t file_number, int add);
+
   VersionSet* vset_;  // VersionSet to which this Version belongs
   Version* next_;     // Next version in linked list
   Version* prev_;     // Previous version in linked list
@@ -152,6 +172,9 @@ class Version {
 
   // List of files per level
   std::vector<FileMetaData*> files_[config::kNumLevels];
+
+  // Queue of recent visit file number
+  VisitQueue* visit_queue_;
 
   // Next file to compact based on seek stats.
   FileMetaData* file_to_compact_;
@@ -233,6 +256,10 @@ class VersionSet {
   // describes the compaction.  Caller should delete the result.
   Compaction* PickCompaction();
 
+  // TODO(floating): Annotation 
+  void SetupOverlapInput(InternalKey smallest, InternalKey largest, 
+                          size_t level, Flotation* f)
+
   // Return a compaction object for compacting the range [begin,end] in
   // the specified level.  Returns nullptr if there is nothing in that
   // level that overlaps the specified range.  Caller should delete
@@ -246,7 +273,10 @@ class VersionSet {
 
   // Create an iterator that reads over the compaction inputs for "*c".
   // The caller should delete the iterator when no longer needed.
-  Iterator* MakeInputIterator(Compaction* c);
+  Iterator* MakeCompactionInputIterator(Compaction* c);
+
+  // TODO(floating): Annotation
+  Iterator* MakeFlotationIterator(FileMetaData* f);
 
   // Returns true iff some level needs a compaction.
   bool NeedsCompaction() const {
@@ -273,6 +303,7 @@ class VersionSet {
   class Builder;
 
   friend class Compaction;
+  friend class Flotation;
   friend class Version;
 
   bool ReuseManifest(const std::string& dscname, const std::string& dscbase);
@@ -386,6 +417,40 @@ class Compaction {
   // higher level than the ones involved in this compaction (i.e. for
   // all L >= level_ + 2).
   size_t level_ptrs_[config::kNumLevels];
+};
+
+// TODO(floating): Annotation
+class Flotation {
+ public:
+  ~Flotation();
+
+  int level() const { return level_; }
+
+  InternalKey largest() const { return floating_file_->largest_[0]; }
+
+  InternalKey smallest() const { return floating_file_->smallest_[0]; }
+
+  VersionEdit* edit() { return edit_; }
+
+  int num_input_files(int level) const { return inputs_[level].size(); }
+
+  FileMetaData* target_file() const { return floating_file_; }
+
+  FileMetaData* input(int level, int i) const { return inputs_[level][i]; }
+ private:
+  friend class Version;
+  friend class VersionSet;
+
+  Flotation(const Options* options, int level, FileMetaData* f);
+
+  uint64_t max_output_file_size_;
+  Version* input_version_;
+  VersionEdit edit_;
+
+  int level_;
+  FileMetaData* floating_file_;
+  std::vector<FileMetaData*> inputs_[config::kNumLevels];
+
 };
 
 }  // namespace leveldb

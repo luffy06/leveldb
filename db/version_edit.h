@@ -16,14 +16,17 @@ namespace leveldb {
 class VersionSet;
 
 struct FileMetaData {
-  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) {}
+  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0), 
+                    frequency(0) {}
 
   int refs;
-  int allowed_seeks;  // Seeks allowed until compaction
+  int allowed_seeks;                  // Seeks allowed until compaction
+  int frequency;
   uint64_t number;
-  uint64_t file_size;    // File size in bytes
-  InternalKey smallest;  // Smallest internal key served by table
-  InternalKey largest;   // Largest internal key served by table
+  uint64_t file_size;                 // File size in bytes
+  uint32_t table_number;              // Total number of tables
+  std::vector<InternalKey> smallest;  // Smallest internal key served by table
+  std::vector<InternalKey> largest;   // Largest internal key served by table
 };
 
 class VersionEdit {
@@ -60,11 +63,13 @@ class VersionEdit {
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
-  void AddFile(int level, uint64_t file, uint64_t file_size,
-               const InternalKey& smallest, const InternalKey& largest) {
+  void AddFile(int level, uint64_t file, uint64_t file_size, int table_number,
+               const std::vector<InternalKey>& smallest, 
+               const std::vector<InternalKey>& largest) {
     FileMetaData f;
     f.number = file;
     f.file_size = file_size;
+    f.table_number = table_number;
     f.smallest = smallest;
     f.largest = largest;
     new_files_.push_back(std::make_pair(level, f));
@@ -99,6 +104,7 @@ class VersionEdit {
   std::vector<std::pair<int, InternalKey>> compact_pointers_;
   DeletedFileSet deleted_files_;
   std::vector<std::pair<int, FileMetaData>> new_files_;
+  std::vector<std::string> visit_queue_;
 };
 
 }  // namespace leveldb
