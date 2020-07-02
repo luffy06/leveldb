@@ -130,7 +130,7 @@ class FaultInjectionTestEnv : public EnvWrapper {
       : EnvWrapper(Env::Default()), filesystem_active_(true) {}
   ~FaultInjectionTestEnv() override = default;
   Status NewWritableFile(const std::string& fname,
-                         WritableFile** result) override;
+                         WritableFile** result, size_t pos = 0) override;
   Status NewAppendableFile(const std::string& fname,
                            WritableFile** result) override;
   Status RemoveFile(const std::string& f) override;
@@ -228,7 +228,8 @@ Status TestWritableFile::Sync() {
 }
 
 Status FaultInjectionTestEnv::NewWritableFile(const std::string& fname,
-                                              WritableFile** result) {
+                                              WritableFile** result, 
+                                              size_t pos) {
   WritableFile* actual_writable_file;
   Status s = target()->NewWritableFile(fname, &actual_writable_file);
   if (s.ok()) {

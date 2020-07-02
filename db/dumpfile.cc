@@ -146,8 +146,9 @@ Status DumpDescriptor(Env* env, const std::string& fname, WritableFile* dst) {
 
 Status DumpTable(Env* env, const std::string& fname, WritableFile* dst) {
   uint64_t file_size;
+  uint32_t table_number = 1;
   RandomAccessFile* file = nullptr;
-  Table* table = nullptr;
+  std::vector<Table*> tables;
   Status s = env->GetFileSize(fname, &file_size);
   if (s.ok()) {
     s = env->NewRandomAccessFile(fname, &file);
@@ -157,54 +158,59 @@ Status DumpTable(Env* env, const std::string& fname, WritableFile* dst) {
     // comparator used in this database. However this should not cause
     // problems since we only use Table operations that do not require
     // any comparisons.  In particular, we do not call Seek or Prev.
-    s = Table::Open(Options(), file, file_size, &table);
+    s = Table::Open(Options(), file, file_size, table_number, tables);
   }
   if (!s.ok()) {
-    delete table;
+    for (size_t i = 0; i < tables.size(); ++ i)
+      delete tables[i];
     delete file;
     return s;
   }
 
   ReadOptions ro;
   ro.fill_cache = false;
-  Iterator* iter = table->NewIterator(ro);
-  std::string r;
-  for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-    r.clear();
-    ParsedInternalKey key;
-    if (!ParseInternalKey(iter->key(), &key)) {
-      r = "badkey '";
-      AppendEscapedStringTo(&r, iter->key());
-      r += "' => '";
-      AppendEscapedStringTo(&r, iter->value());
-      r += "'\n";
-      dst->Append(r);
-    } else {
-      r = "'";
-      AppendEscapedStringTo(&r, key.user_key);
-      r += "' @ ";
-      AppendNumberTo(&r, key.sequence);
-      r += " : ";
-      if (key.type == kTypeDeletion) {
-        r += "del";
-      } else if (key.type == kTypeValue) {
-        r += "val";
+  for (size_t i = 0; i < tables.size(); ++ i) {
+    Iterator* iter = tables[i]->NewIterator(ro);
+    std::string r;
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+      r.clear();
+      ParsedInternalKey key;
+      if (!ParseInternalKey(iter->key(), &key)) {
+        r = "badkey '";
+        AppendEscapedStringTo(&r, iter->key());
+        r += "' => '";
+        AppendEscapedStringTo(&r, iter->value());
+        r += "'\n";
+        dst->Append(r);
       } else {
-        AppendNumberTo(&r, key.type);
+        r = "'";
+        AppendEscapedStringTo(&r, key.user_key);
+        r += "' @ ";
+        AppendNumberTo(&r, key.sequence);
+        r += " : ";
+        if (key.type == kTypeDeletion) {
+          r += "del";
+        } else if (key.type == kTypeValue) {
+          r += "val";
+        } else {
+          AppendNumberTo(&r, key.type);
+        }
+        r += " => '";
+        AppendEscapedStringTo(&r, iter->value());
+        r += "'\n";
+        dst->Append(r);
       }
-      r += " => '";
-      AppendEscapedStringTo(&r, iter->value());
-      r += "'\n";
-      dst->Append(r);
     }
-  }
-  s = iter->status();
-  if (!s.ok()) {
-    dst->Append("iterator error: " + s.ToString() + "\n");
+    s = iter->status();
+    if (!s.ok()) {
+      dst->Append("iterator error: " + s.ToString() + "\n");
+    }
+
+    delete iter;
   }
 
-  delete iter;
-  delete table;
+  for (size_t i = 0; i < tables.size(); ++ i)
+    delete tables[i];
   delete file;
   return Status::OK();
 }

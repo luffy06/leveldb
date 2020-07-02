@@ -325,8 +325,8 @@ class TestState {
   port::CondVar state_cv_ GUARDED_BY(mu_);
 };
 
-static void ConcurrentReader(void* arg) {
-  TestState* state = reinterpret_cast<TestState*>(arg);
+static void ConcurrentReader(void* arg1, void *arg2) {
+  TestState* state = reinterpret_cast<TestState*>(arg1);
   Random rnd(state->seed_);
   int64_t reads = 0;
   state->Change(TestState::RUNNING);
@@ -347,7 +347,7 @@ static void RunConcurrent(int run) {
       fprintf(stderr, "Run %d of %d\n", i, N);
     }
     TestState state(seed + 1);
-    Env::Default()->Schedule(ConcurrentReader, &state);
+    Env::Default()->Schedule(ConcurrentReader, &state, &state);
     state.Wait(TestState::RUNNING);
     for (int i = 0; i < kSize; i++) {
       state.t_.WriteStep(&rnd);

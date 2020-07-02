@@ -31,6 +31,7 @@ class Writer;
 }
 
 class Compaction;
+class Flotation;
 class Iterator;
 class MemTable;
 class TableBuilder;
@@ -62,11 +63,11 @@ class VisitQueue {
  public:
   VisitQueue() : start_index_(-1), end_index_(-1) {}
 
-  bool Full() { return Length() == kNumVisitQueue; }
+  bool Full() { return Length() == config::kNumVisitQueue; }
 
   int Length();
 
-  std::string Add(size_t level, uint64_t file_number);
+  Slice Add(int level, uint64_t file_number);
 
  private:
   std::string number_queue_[config::kNumVisitQueue + 1];
@@ -142,9 +143,11 @@ class Version {
         next_(this),
         prev_(this),
         refs_(0),
-        visit_queue_(new VisitQueue())
+        visit_queue_(new VisitQueue()),
         file_to_compact_(nullptr),
         file_to_compact_level_(-1),
+        file_to_float_(nullptr),
+        file_to_float_level_(-1),
         compaction_score_(-1),
         compaction_level_(-1) {}
 
@@ -176,7 +179,10 @@ class Version {
   // Queue of recent visit file number
   VisitQueue* visit_queue_;
 
-  // Next file to compact based on seek stats.
+  FileMetaData* file_to_float_;
+  int file_to_float_level_;
+
+  // Next file to float based on seek stats.
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 
@@ -256,9 +262,12 @@ class VersionSet {
   // describes the compaction.  Caller should delete the result.
   Compaction* PickCompaction();
 
+  // TODO(floating): Annotation
+  Flotation* PickFlotation();
+
   // TODO(floating): Annotation 
   void SetupOverlapInput(InternalKey smallest, InternalKey largest, 
-                          size_t level, Flotation* f)
+                          size_t level, Flotation* f);
 
   // Return a compaction object for compacting the range [begin,end] in
   // the specified level.  Returns nullptr if there is nothing in that
@@ -276,12 +285,18 @@ class VersionSet {
   Iterator* MakeCompactionInputIterator(Compaction* c);
 
   // TODO(floating): Annotation
-  Iterator* MakeFlotationIterator(FileMetaData* f);
+  Iterator* MakeFlotationIterator(Flotation* f);
 
   // Returns true iff some level needs a compaction.
   bool NeedsCompaction() const {
     Version* v = current_;
     return (v->compaction_score_ >= 1) || (v->file_to_compact_ != nullptr);
+  }
+
+  // TODO(floating): Annotation
+  bool NeedsFlotation() const {
+    Version* v = current_;
+    return v->file_to_float_ != nullptr;
   }
 
   // Add all files listed in any live version to *live.
@@ -426,22 +441,26 @@ class Flotation {
 
   int level() const { return level_; }
 
-  InternalKey largest() const { return floating_file_->largest_[0]; }
+  InternalKey largest() const { return floating_file_->largest[0]; }
 
-  InternalKey smallest() const { return floating_file_->smallest_[0]; }
+  InternalKey smallest() const { return floating_file_->smallest[0]; }
 
-  VersionEdit* edit() { return edit_; }
+  VersionEdit* edit() { return &edit_; }
 
   int num_input_files(int level) const { return inputs_[level].size(); }
 
   FileMetaData* target_file() const { return floating_file_; }
 
   FileMetaData* input(int level, int i) const { return inputs_[level][i]; }
+
+  void AddInputDeletions(VersionEdit* edit);
+
+  void ReleaseInputs();
  private:
   friend class Version;
   friend class VersionSet;
 
-  Flotation(const Options* options, int level, FileMetaData* f);
+  Flotation(const Options* options, FileMetaData* f, int level);
 
   uint64_t max_output_file_size_;
   Version* input_version_;

@@ -169,6 +169,7 @@ target_sources(leveldb
     "table/merger.cc"
     "table/merger.h"
     "table/table_builder.cc"
+    "table/table_appender.cc"
     "table/table.cc"
     "table/two_level_iterator.cc"
     "table/two_level_iterator.h"
@@ -208,6 +209,7 @@ target_sources(leveldb
     "${LEVELDB_PUBLIC_INCLUDE_DIR}/slice.h"
     "${LEVELDB_PUBLIC_INCLUDE_DIR}/status.h"
     "${LEVELDB_PUBLIC_INCLUDE_DIR}/table_builder.h"
+    "${LEVELDB_PUBLIC_INCLUDE_DIR}/table_appender.h"
     "${LEVELDB_PUBLIC_INCLUDE_DIR}/table.h"
     "${LEVELDB_PUBLIC_INCLUDE_DIR}/write_batch.h"
 )

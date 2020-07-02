@@ -1,18 +1,21 @@
 #include "leveldb/table_appender.h"
 
+#include "leveldb/env.h"
+
 namespace leveldb {
 
 TableAppender::TableAppender(const Options& options, RandomAccessFile* readfile, 
                             uint64_t offset, int footerlist_size, 
-                            WritableFile* appendfile)
-    : super(options, appendfile), 
+                            WritableFile* appendfile, int table_number)
+    : TableBuilder(options, appendfile), 
       origin_footerlist_offset_(offset), 
       origin_footerlist_size_(footerlist_size),
-      readfile_(readfile) { }
+      readfile_(readfile),
+      table_number_(table_number) { }
 
 TableAppender::~TableAppender() { }
 
-Status TableBuilder::InitialFooter(BlockHandle metaindex_block_handle, 
+Status TableAppender::InitialFooter(BlockHandle metaindex_block_handle, 
                                         BlockHandle index_block_handle,
                                         std::string& footer_encoding) {
   char footerlist_space[origin_footerlist_size_];
@@ -24,7 +27,7 @@ Status TableBuilder::InitialFooter(BlockHandle metaindex_block_handle,
   }
 
   FooterList footerlist;
-  s = footerlist.DecodeFrom(&footerlist_input);
+  s = footerlist.DecodeFrom(&footerlist_input, table_number_);
   if (!s.ok()) {
     return s;
   }
@@ -32,9 +35,8 @@ Status TableBuilder::InitialFooter(BlockHandle metaindex_block_handle,
   Footer footer;
   footer.set_metaindex_handle(metaindex_block_handle);
   footer.set_index_handle(index_block_handle);
-  footer_list.append_new_footer(footer)
-  std::string footer_encoding;
-  footer_list.EncodeTo(&footer_encoding);
+  footerlist.append_new_footer(footer);
+  footerlist.EncodeTo(&footer_encoding);
   return s;
 }
 

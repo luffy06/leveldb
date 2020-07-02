@@ -10,7 +10,8 @@
 #include "leveldb/export.h"
 #include "leveldb/options.h"
 #include "leveldb/status.h"
-#include "leveldb/table_build.h"
+#include "leveldb/table_builder.h"
+#include "table/format.h"
 
 namespace leveldb {
 
@@ -22,7 +23,8 @@ class WritableFile;
 class LEVELDB_EXPORT TableAppender : public TableBuilder {
  public:
   TableAppender(const Options& options, RandomAccessFile* readfile, 
-                uint64_t offset, int footerlist_size, WritableFile* appendfile);
+                uint64_t offset, int footerlist_size, WritableFile* appendfile,
+                int table_number);
 
   TableAppender(const TableAppender&) = delete;
   TableAppender& operator=(const TableAppender&) = delete;
@@ -37,6 +39,7 @@ class LEVELDB_EXPORT TableAppender : public TableBuilder {
 
   uint64_t origin_footerlist_offset_;
   int origin_footerlist_size_;
+  int table_number_;
   RandomAccessFile* readfile_;
 
 };

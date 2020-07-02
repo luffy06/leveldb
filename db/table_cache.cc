@@ -7,6 +7,7 @@
 #include "db/filename.h"
 #include "leveldb/env.h"
 #include "leveldb/table.h"
+#include "table/merger.h"
 #include "util/coding.h"
 
 namespace leveldb {
@@ -58,7 +59,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
-      s = Table::Open(options_, file, file_size, table_number, &tables);
+      s = Table::Open(options_, file, file_size, table_number, tables);
     }
 
     if (!s.ok()) {
@@ -80,9 +81,11 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number, uint64_t file_size, 
                                   uint32_t table_number, Table*** tableptr) {
-  for (size_t i = 0; i < table_number; ++ i) {
-    if (tableptr[i] != nullptr)
-      *(tableptr[i]) = nullptr;
+  if (tableptr != nullptr) {
+    for (size_t i = 0; i < table_number; ++ i) {
+      if (tableptr[i] != nullptr)
+        *(tableptr[i]) = nullptr;
+    }
   }
 
   Cache::Handle* handle = nullptr;
@@ -94,14 +97,18 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
                                                 cache_->Value(handle))->tables;
   std::vector<Iterator*> table_iterators;
   for (int i = 0; i < tables.size(); ++ i) {
-    table_iterators.push_back(tables[i]->NewIterator(options));
-    tables[i]->RegisterCleanup(&UnrefEntry, cache_, handle);
+    Iterator* iter = tables[i]->NewIterator(options);
+    table_iterators.push_back(iter);
+    iter->RegisterCleanup(&UnrefEntry, cache_, handle);
   }
   // TODO(floating): Verify that whether the key is encoded with sequence number
-  Iterator* result = new MergeIterator(options_.comparator, &table_iterators[0], 
-                                      table_iterators.size());
-  for (size_t i = 0; i < tables.size(); ++ i) {
-    *(tableptr[i]) = tables[i];
+  Iterator* result = NewMergingIterator(options_.comparator, 
+                                        &table_iterators[0], 
+                                        table_iterators.size());
+  if (tableptr != nullptr) {
+    for (size_t i = 0; i < tables.size(); ++ i) {
+      *(tableptr[i]) = tables[i];
+    }    
   }
   return result;
 }

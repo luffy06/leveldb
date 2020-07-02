@@ -50,7 +50,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
   if (!s.ok()) return s;
 
   FooterList footerlist;
-  s = footerlist.DecodeFrom(&footerlist_input);
+  s = footerlist.DecodeFrom(&footerlist_input, table_number);
   if (!s.ok()) return s;
 
   // Read the index block
@@ -79,7 +79,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
       rep->filter = nullptr;
       Table* table = new Table(rep);
       table->ReadMeta(footer);
-      tables.push_back(table)
+      tables.push_back(table);
     }    
   }
 

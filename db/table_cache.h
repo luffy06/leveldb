@@ -8,7 +8,7 @@
 #define STORAGE_LEVELDB_DB_TABLE_CACHE_H_
 
 #include <stdint.h>
-
+#include <iostream>
 #include <string>
 
 #include "db/dbformat.h"

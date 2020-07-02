@@ -6,7 +6,7 @@
 #define STORAGE_LEVELDB_TABLE_FORMAT_H_
 
 #include <stdint.h>
-
+#include <vector>
 #include <string>
 
 #include "leveldb/slice.h"
@@ -90,7 +90,7 @@ class FooterList {
   uint32_t size() { return handle_list.size(); }
 
   void EncodeTo(std::string* dst) const;
-  Status DecodeFrom(Slice* input);
+  Status DecodeFrom(Slice* input, uint32_t table_number);
 
  private:
   std::vector<Footer> handle_list;

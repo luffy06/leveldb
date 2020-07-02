@@ -202,9 +202,9 @@ Status TableBuilder::InitialFooter(BlockHandle metaindex_block_handle,
   Footer footer;
   footer.set_metaindex_handle(metaindex_block_handle);
   footer.set_index_handle(index_block_handle);
-  footer_list.append_new_footer(footer)
+  footer_list.append_new_footer(footer);
   footer_list.EncodeTo(&footer_encoding);
-  return Status();
+  return Status::OK();
 }
 
 Status TableBuilder::Finish() {

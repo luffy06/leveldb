@@ -2266,7 +2266,10 @@ void BM_LogAndApply(int iters, int num_base_files) {
   for (int i = 0; i < num_base_files; i++) {
     InternalKey start(MakeKey(2 * fnum), 1, kTypeValue);
     InternalKey limit(MakeKey(2 * fnum + 1), 1, kTypeDeletion);
-    vbase.AddFile(2, fnum++, 1 /* file size */, start, limit);
+    std::vector<InternalKey> smallest, largest;
+    smallest.push_back(start);
+    largest.push_back(limit);
+    vbase.AddFile(2, fnum++, 1 /* file size */, 1, smallest, largest);
   }
   ASSERT_LEVELDB_OK(vset.LogAndApply(&vbase, &mu));
 
@@ -2277,7 +2280,10 @@ void BM_LogAndApply(int iters, int num_base_files) {
     vedit.RemoveFile(2, fnum);
     InternalKey start(MakeKey(2 * fnum), 1, kTypeValue);
     InternalKey limit(MakeKey(2 * fnum + 1), 1, kTypeDeletion);
-    vedit.AddFile(2, fnum++, 1 /* file size */, start, limit);
+    std::vector<InternalKey> smallest, largest;
+    smallest.push_back(start);
+    largest.push_back(limit);
+    vedit.AddFile(2, fnum++, 1 /* file size */, 1, smallest, largest);
     vset.LogAndApply(&vedit, &mu);
   }
   uint64_t stop_micros = env->NowMicros();

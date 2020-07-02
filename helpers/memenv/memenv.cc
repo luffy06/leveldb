@@ -255,7 +255,7 @@ class InMemoryEnv : public EnvWrapper {
   }
 
   Status NewWritableFile(const std::string& fname,
-                         WritableFile** result) override {
+                         WritableFile** result, size_t pos = 0) override {
     MutexLock lock(&mutex_);
     FileSystem::iterator it = file_map_.find(fname);
 

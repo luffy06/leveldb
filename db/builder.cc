@@ -38,6 +38,7 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
     }
     meta->smallest.push_back(smallest);
     meta->largest.push_back(largest);
+    meta->table_number = 1;
 
     // Finish and check for builder errors
     s = builder->Finish();
@@ -59,6 +60,8 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
 
     if (s.ok()) {
       // Verify that the table is usable
+
+      assert(table_cache != nullptr);
       Iterator* it = table_cache->NewIterator(ReadOptions(), meta->number,
                                               meta->file_size, 
                                               meta->table_number);

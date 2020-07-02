@@ -76,8 +76,8 @@ TEST_F(EnvTest, RunImmediately) {
     port::CondVar cvar{&mu};
     bool called = false;
 
-    static void Run(void* arg) {
-      RunState* state = reinterpret_cast<RunState*>(arg);
+    static void Run(void* arg1, void* arg2) {
+      RunState* state = reinterpret_cast<RunState*>(arg1);
       MutexLock l(&state->mu);
       ASSERT_EQ(state->called, false);
       state->called = true;
@@ -86,7 +86,7 @@ TEST_F(EnvTest, RunImmediately) {
   };
 
   RunState state;
-  env_->Schedule(&RunState::Run, &state);
+  env_->Schedule(&RunState::Run, &state, &state);
 
   MutexLock l(&state.mu);
   while (!state.called) {
@@ -107,8 +107,8 @@ TEST_F(EnvTest, RunMany) {
 
     Callback(RunState* s, int id) : state_(s), id_(id) {}
 
-    static void Run(void* arg) {
-      Callback* callback = reinterpret_cast<Callback*>(arg);
+    static void Run(void* arg1, void* arg2) {
+      Callback* callback = reinterpret_cast<Callback*>(arg1);
       RunState* state = callback->state_;
 
       MutexLock l(&state->mu);
@@ -123,10 +123,10 @@ TEST_F(EnvTest, RunMany) {
   Callback callback2(&state, 2);
   Callback callback3(&state, 3);
   Callback callback4(&state, 4);
-  env_->Schedule(&Callback::Run, &callback1);
-  env_->Schedule(&Callback::Run, &callback2);
-  env_->Schedule(&Callback::Run, &callback3);
-  env_->Schedule(&Callback::Run, &callback4);
+  env_->Schedule(&Callback::Run, &callback1, &callback1);
+  env_->Schedule(&Callback::Run, &callback2, &callback2);
+  env_->Schedule(&Callback::Run, &callback3, &callback3);
+  env_->Schedule(&Callback::Run, &callback4, &callback4);
 
   MutexLock l(&state.mu);
   while (state.last_id != 4) {

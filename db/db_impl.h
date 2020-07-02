@@ -72,8 +72,11 @@ class DBImpl : public DB {
   void RecordReadSample(Slice key);
 
  private:
+  enum Direction { kFlotation, kCompaction };
+
   friend class DB;
   struct CompactionState;
+  struct FlotationState;
   struct Writer;
 
   // Information for a manual compaction
@@ -153,26 +156,30 @@ class DBImpl : public DB {
   void RecordBackgroundError(const Status& s);
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  static void BGWork(void* db);
-  void BackgroundCall();
+  static void BGWork(void* db, void* d);
+  void BackgroundCall(enum Direction d);
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   Status DoCompactionWork(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  void MaybeScheduleFlotation() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   Status OpenCompactionOutputFile(CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  void BackgroundFlotation();
+  void CleanupFlotation(FlotationState* floating);
   Status DoFlotationWork(FlotationState* floating)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   void GetFlotationInteratorRange(Iterator* iter, std::vector<bool> deleted, 
                           InternalKey& smallest, InternalKey& largest);
-  Status OpenFlotationAppendFile(FlotationState* floating, 
-                                uint64_t file_number, uint64_t offset);
+  Status OpenFlotationAppendFile(FlotationState* floating, uint64_t file_number, 
+                                  uint64_t offset, int footerlist_size, 
+                                  int table_number);
   Status FinishFlotationAppendFile(FlotationState* floating, Iterator* input);
   Status InstallFlotationResults(FlotationState* floating)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
@@ -220,6 +227,8 @@ class DBImpl : public DB {
 
   // Has a background compaction been scheduled or is running?
   bool background_compaction_scheduled_ GUARDED_BY(mutex_);
+
+  bool background_flotation_scheduled_ GUARDED_BY(mutex_);
 
   ManualCompaction* manual_compaction_ GUARDED_BY(mutex_);
 

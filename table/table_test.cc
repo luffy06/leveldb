@@ -15,6 +15,7 @@
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
 #include "leveldb/table_builder.h"
+#include "table/merger.h"
 #include "table/block.h"
 #include "table/block_builder.h"
 #include "table/format.h"
@@ -210,7 +211,7 @@ class BlockConstructor : public Constructor {
 class TableConstructor : public Constructor {
  public:
   TableConstructor(const Comparator* cmp)
-      : Constructor(cmp), source_(nullptr), table_(nullptr) {}
+      : Constructor(cmp), source_(nullptr) {}
   ~TableConstructor() override { Reset(); }
   Status FinishImpl(const Options& options, const KVMap& data) override {
     Reset();
@@ -230,27 +231,42 @@ class TableConstructor : public Constructor {
     source_ = new StringSource(sink.contents());
     Options table_options;
     table_options.comparator = options.comparator;
-    return Table::Open(table_options, source_, sink.contents().size(), &table_);
+    return Table::Open(table_options, source_, sink.contents().size(), 1, tables_);
   }
 
   Iterator* NewIterator() const override {
-    return table_->NewIterator(ReadOptions());
+    std::vector<Iterator*> table_iterators;
+    for (int i = 0; i < tables_.size(); ++ i) {
+      Iterator* iter = tables_[i]->NewIterator(ReadOptions());
+      table_iterators.push_back(iter);
+    }
+    // TODO(floating): Verify that whether the key is encoded with sequence number
+    Iterator* result = NewMergingIterator(Options().comparator, 
+                                          &table_iterators[0], 
+                                          table_iterators.size());
+    return result;
   }
 
   uint64_t ApproximateOffsetOf(const Slice& key) const {
-    return table_->ApproximateOffsetOf(key);
+    bool found = false;;
+    uint64_t table_offset = 0;
+    for (size_t i = 0; i < tables_.size(); ++ i) {
+      table_offset += tables_[i]->ApproximateOffsetOf(key, found);
+      if (found) break;
+    }
+    return table_offset;
   }
 
  private:
   void Reset() {
-    delete table_;
+    for (size_t i = 0; i < tables_.size(); ++ i)
+      delete tables_[i];
     delete source_;
-    table_ = nullptr;
     source_ = nullptr;
   }
 
   StringSource* source_;
-  Table* table_;
+  std::vector<Table*> tables_;
 
   TableConstructor();
 };

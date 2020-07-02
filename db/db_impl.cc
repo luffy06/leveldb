@@ -28,7 +28,9 @@
 #include "leveldb/status.h"
 #include "leveldb/table.h"
 #include "leveldb/table_builder.h"
+#include "leveldb/table_appender.h"
 #include "port/port.h"
+#include "table/format.h"
 #include "table/block.h"
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
@@ -97,8 +99,6 @@ struct DBImpl::FlotationState{
 
     Addition(uint64_t n) 
       : number(n), 
-        smallest(nullptr), 
-        largest(nullptr), 
         appending_bytes(0) { }
   };
 
@@ -112,10 +112,9 @@ struct DBImpl::FlotationState{
         appender(nullptr),
         total_bytes(0) {}
 
-  Flotation* const flotation;
+  Flotation* flotation;
 
   SequenceNumber smallest_snapshot;
-  // State kept for output being generated
   std::vector<Addition> additions;
   RandomAccessFile* readfile;
   WritableFile* appendfile;
@@ -183,6 +182,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       seed_(0),
       tmp_batch_(new WriteBatch),
       background_compaction_scheduled_(false),
+      background_flotation_scheduled_(false),
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
                                &internal_comparator_)) {}
@@ -705,26 +705,37 @@ void DBImpl::MaybeScheduleCompaction() {
     // No work to be done
   } else {
     background_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this);
+    enum Direction d = kCompaction;
+    env_->Schedule(&DBImpl::BGWork, this, &d);
   }
 }
 
-void DBImpl::BGWork(void* db) {
-  reinterpret_cast<DBImpl*>(db)->BackgroundCall();
+void DBImpl::MaybeScheduleFlotation() {
+  mutex_.AssertHeld();
+  background_flotation_scheduled_ = true;
+  enum Direction d = kFlotation;
+  env_->Schedule(&DBImpl::BGWork, this, &d);
 }
 
-void DBImpl::BackgroundCall() {
+void DBImpl::BGWork(void* db, void* d) {
+  reinterpret_cast<DBImpl*>(db)->BackgroundCall(*(reinterpret_cast<enum Direction*>(d)));
+}
+
+void DBImpl::BackgroundCall(enum Direction d) {
   MutexLock l(&mutex_);
   assert(background_compaction_scheduled_);
   if (shutting_down_.load(std::memory_order_acquire)) {
     // No more background work when shutting down.
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
-  } else {
+  } else if (d == kCompaction) {
     BackgroundCompaction();
+  } else if (d == kFlotation) {
+    BackgroundFlotation();
   }
 
   background_compaction_scheduled_ = false;
+  background_flotation_scheduled_ = false;
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
@@ -748,7 +759,7 @@ void DBImpl::BackgroundCompaction() {
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == nullptr);
     if (c != nullptr) {
-      manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
+      manual_end = c->input(0, c->num_input_files(0) - 1)->largest[0];
     }
     Log(options_.info_log,
         "Manual compaction at level-%d from %s .. %s; will stop at %s\n",
@@ -917,8 +928,11 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   const int level = compact->compaction->level();
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     const CompactionState::Output& out = compact->outputs[i];
+    std::vector<InternalKey> s, l;
+    s.push_back(out.smallest);
+    l.push_back(out.largest);
     compact->compaction->edit()->AddFile(level + 1, out.number, out.file_size, 
-                                          1, out.smallest, out.largest);
+                                          1, s, l);
   }
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
@@ -1085,6 +1099,57 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 }
 
 // TODO(floating): Annotation
+void DBImpl::BackgroundFlotation() {
+  mutex_.AssertHeld();
+
+  if (imm_ != nullptr) {
+    CompactMemTable();
+    return;
+  }
+
+  Flotation* f = versions_->PickFlotation();
+  
+  Status status;
+  if (f == nullptr) {
+    // Nothing to do
+  } else {
+    FlotationState* floating = new FlotationState(f);
+    status = DoFlotationWork(floating);
+    if (!status.ok()) {
+      RecordBackgroundError(status);
+    }
+    CleanupFlotation(floating);
+    f->ReleaseInputs();
+    RemoveObsoleteFiles();
+  }
+  delete f;
+
+  if (status.ok()) {
+    // Done
+  } else if (shutting_down_.load(std::memory_order_acquire)) {
+    // Ignore compaction errors found during shutting down
+  } else {
+    Log(options_.info_log, "Flotation error: %s", status.ToString().c_str());
+  }
+}
+
+// TODO(floating): Annotation
+void DBImpl::CleanupFlotation(FlotationState* floating) {
+  mutex_.AssertHeld();
+  if (floating->appender != nullptr) {
+    // May happen if we get a shutdown call in the middle of compaction
+    floating->appender->Abandon();
+    delete floating->appender;
+  } else {
+    assert(floating->readfile == nullptr);
+    assert(floating->appendfile == nullptr);
+  }
+  delete floating->readfile;
+  delete floating->appendfile;
+  delete floating;
+}
+
+// TODO(floating): Annotation
 void DBImpl::GetFlotationInteratorRange(Iterator* iter, 
                                         std::vector<bool> deleted, 
                                         InternalKey& smallest, 
@@ -1092,34 +1157,36 @@ void DBImpl::GetFlotationInteratorRange(Iterator* iter,
   int i = 0;
   iter->SeekToFirst();
   while (iter->Valid() && i < deleted.size() && deleted[i]) {
-    smallest = iter->Key();
     ++ i;
     iter->Next();
   }
+  smallest.DecodeFrom(iter->key());
+
   i = deleted.size() - 1;
   iter->SeekToLast();
   while (iter->Valid() && i >= 0 && deleted[i]) {
-    largest = iter->Key();
     iter->Prev();
     -- i;
   }
+  largest.DecodeFrom(iter->key());
 }
 
 // TODO(floating): Annotation
 Status DBImpl::OpenFlotationAppendFile(FlotationState* floating, 
                                       uint64_t file_number, uint64_t offset, 
-                                      int footerlist_size) {
+                                      int footerlist_size, int table_number) {
   assert(floating != nullptr);
   assert(floating->appender == nullptr);
   
   floating->additions.push_back(FlotationState::Addition(file_number));
   std::string fname = TableFileName(dbname_, file_number);
   Status s = env_->NewWritableFile(fname, &floating->appendfile, offset);
-  Status s = env_->NewRandomAccessFile(fname, &floating->readfile);
+  s = env_->NewRandomAccessFile(fname, &floating->readfile);
   if (s.ok()) {
     floating->appender = new TableAppender(options_, floating->readfile, offset,
                                             footerlist_size, 
-                                            floating->appendfile);
+                                            floating->appendfile,
+                                            table_number);
   }
   return s;
 }
@@ -1152,9 +1219,6 @@ Status DBImpl::FinishFlotationAppendFile(FlotationState* floating,
   if (s.ok()) {
     s = floating->appendfile->Close();
   }
-  if (s.ok()) {
-    s = floating->readfile->Close();
-  }
   delete floating->readfile;
   delete floating->appendfile;
   floating->readfile = nullptr;
@@ -1166,9 +1230,10 @@ Status DBImpl::FinishFlotationAppendFile(FlotationState* floating,
 // TODO(floating): Annotation
 Status DBImpl::InstallFlotationResults(FlotationState* floating) {
   mutex_.AssertHeld();
-  Log(options_.info_log, "Flotation level: %d, Range: [%d, %d] => %lld bytes",
-      floating->flotation->level(), floating->flotation->smallest(),
-      floating->flotation->largest(), 
+  Log(options_.info_log, "Flotation level: %d, Range: [%s, %s] => %lld bytes",
+      floating->flotation->level(), 
+      floating->flotation->smallest().user_key().data(),
+      floating->flotation->largest().user_key().data(), 
       static_cast<long long>(floating->total_bytes));
 
   // Add flotation outputs
@@ -1176,9 +1241,12 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
   const int level = floating->flotation->level();
   for (size_t i = 0; i < floating->additions.size(); i++) {
     const FlotationState::Addition& add = floating->additions[i];
+    std::vector<InternalKey> smallest, largest;
+    smallest.push_back(add.smallest);
+    largest.push_back(add.largest);
     floating->flotation->edit()->ModifyFile(level, add.number, 
-                                            add.appending_bytes, 
-                                            add.smallest, add.largest);
+                                            add.appending_bytes, smallest, 
+                                            largest);
   }
   return versions_->LogAndApply(floating->flotation->edit(), &mutex_);
 }
@@ -1188,22 +1256,24 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
-  Log(options_.info_log, "Floating file from level %d Range: [%d, %d]",
-      floating->flotation->level(), floating->flotation->smallest(),
-      floating->flotation->largest());
+  Log(options_.info_log, "Floating file from level %d Range: [%s, %s]",
+      floating->flotation->level(), 
+      floating->flotation->smallest().user_key().data(),
+      floating->flotation->largest().user_key().data());
 
   assert(versions_->NumLevelFiles(floating->flotation->level()) > 0);
   assert(floating->appender == nullptr);
   assert(floating->outfile == nullptr);
   if (snapshots_.empty()) {
-    compact->smallest_snapshot = versions_->LastSequence();
+    floating->smallest_snapshot = versions_->LastSequence();
   } else {
-    compact->smallest_snapshot = snapshots_.oldest()->sequence_number();
+    floating->smallest_snapshot = snapshots_.oldest()->sequence_number();
   }
 
-  Iterator* input = versions_->MakeFlotationIterator(
-                                            floating->flotation->target_file());
+  // Muti-Load
+  Iterator* input = versions_->MakeFlotationIterator(floating->flotation);
 
+  Status status;
   std::vector<bool> deleted;
   input->SeekToFirst();
   while (input->Valid()) {
@@ -1214,12 +1284,13 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   mutex_.Unlock();
   for (int l = floating->flotation->level() - 1; l >= 0; -- l) {
     InternalKey smallest, largest;
-    GetInteratorRange(input, deleted, &smallest, &largest);
+    GetFlotationInteratorRange(input, deleted, smallest, largest);
     input->SeekToFirst();
 
-    versions_->SetupOverlapInput(smallest, largest, l, &floating->flotation);
+    mutex_.Lock();
+    versions_->SetupOverlapInput(smallest, largest, l, floating->flotation);
+    mutex_.Unlock();
 
-    Status status;
     ParsedInternalKey ikey;
 
     for (int i = 0, j = 0; i < floating->flotation->num_input_files(l) && 
@@ -1241,7 +1312,10 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
       if (floating->appender == nullptr) {
         FileMetaData* fmd = floating->flotation->input(l, i);
         status = OpenFlotationAppendFile(floating, fmd->number,
-                    fmd->file_size - FooterList::encoded_length(table_number));
+                    fmd->file_size - 
+                    FooterList::encoded_length(fmd->table_number), 
+                    FooterList::encoded_length(fmd->table_number),
+                    fmd->table_number);
         if (!status.ok()) {
           break;
         }
@@ -1252,15 +1326,15 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
         // Do not hide error keys
       } else {
         if (user_comparator()->Compare(ikey.user_key, 
-              floating->flotation->input(l, i)->largest[0]) <= 0 && 
+              floating->flotation->input(l, i)->largest[0].user_key()) <= 0 && 
               user_comparator()->Compare(ikey.user_key, 
-              floating->flotation->input(l, i)->smallest[0]) >= 0) {
+              floating->flotation->input(l, i)->smallest[0].user_key()) >= 0) {
           // This key should be appended to the file of input[l][i]
           floating->appender->Add(key, input->value());
           deleted[j] = true;
         } else if (user_comparator()->Compare(ikey.user_key, 
-                    floating->flotation->input(l, i)->largest[0]) > 0) {
-          status = FinishFlotationAppendFile(floating);
+                    floating->flotation->input(l, i)->largest[0].user_key()) > 0) {
+          status = FinishFlotationAppendFile(floating, input);
           if (!status.ok()) {
             break;
           }
@@ -1268,6 +1342,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
           continue;
         }
       }
+      // Deleted First
       while (input->Valid() && deleted[j]) {
         input->Next();
         ++ j;
@@ -1279,7 +1354,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     status = Status::IOError("Deleting DB during flotation");
   }
   if (status.ok() && floating->appender != nullptr) {
-    FinishFlotationAppendFile(floating);
+    FinishFlotationAppendFile(floating, input);
   }
 
   FlotationStats stats;
@@ -1290,15 +1365,15 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
                                 floating->flotation->input(l, i)->table_number);
     }
   }
-  for (size_t i = 0; i < floating->outputs.size(); i++) {
-    stats.bytes_written += floating->outputs[i].appending_bytes;
+  for (size_t i = 0; i < floating->additions.size(); i++) {
+    stats.bytes_written += floating->additions[i].appending_bytes;
   }
 
   mutex_.Lock();
   stats_f_[floating->flotation->level()].Add(stats);
 
   if (status.ok()) {
-    status = InstallFlotationResults(compact);
+    status = InstallFlotationResults(floating);
   }
   if (!status.ok()) {
     RecordBackgroundError(status);
@@ -1408,6 +1483,9 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     mutex_.Lock();
   }
 
+  if (versions_->NeedsFlotation()) {
+    MaybeScheduleFlotation();
+  }
   if (have_stat_update && current->UpdateStats(stats)) {
     MaybeScheduleCompaction();
   }

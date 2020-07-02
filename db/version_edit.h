@@ -8,6 +8,7 @@
 #include <set>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "db/dbformat.h"
 
@@ -18,6 +19,14 @@ class VersionSet;
 struct FileMetaData {
   FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0), 
                     frequency(0) {}
+
+  // TODO(delete)
+  void show_infos() {
+    std::cout << "Refs: " << refs << "\nAllowed Seeks: " << allowed_seeks << 
+                "\nFrequency: " << frequency << "\nNumber: " << number <<
+                "\nFile Size: " << file_size << "\nTable Number: " << 
+                table_number << std::endl;
+  }
 
   int refs;
   int allowed_seeks;                  // Seeks allowed until compaction
@@ -75,6 +84,18 @@ class VersionEdit {
     new_files_.push_back(std::make_pair(level, f));
   }
 
+  void ModifyFile(int level, uint64_t file, uint64_t file_size,
+               const std::vector<InternalKey>& smallest, 
+               const std::vector<InternalKey>& largest) {
+    FileMetaData f;
+    f.number = file;
+    f.file_size = file_size;
+    f.table_number = 1;
+    f.smallest = smallest;
+    f.largest = largest;
+    modified_files_.push_back(std::make_pair(level, f));
+  }
+
   // Delete the specified "file" from the specified "level".
   void RemoveFile(int level, uint64_t file) {
     deleted_files_.insert(std::make_pair(level, file));
@@ -104,6 +125,7 @@ class VersionEdit {
   std::vector<std::pair<int, InternalKey>> compact_pointers_;
   DeletedFileSet deleted_files_;
   std::vector<std::pair<int, FileMetaData>> new_files_;
+  std::vector<std::pair<int, FileMetaData>> modified_files_;
   std::vector<std::string> visit_queue_;
 };
 

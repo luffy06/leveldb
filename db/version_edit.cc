@@ -20,7 +20,8 @@ enum Tag {
   kDeletedFile = 6,
   kNewFile = 7,
   // 8 was used for large value refs
-  kPrevLogNumber = 9
+  kPrevLogNumber = 9,
+  kModifedFile = 10
 };
 
 void VersionEdit::Clear() {
@@ -36,6 +37,7 @@ void VersionEdit::Clear() {
   has_last_sequence_ = false;
   deleted_files_.clear();
   new_files_.clear();
+  modified_files_.clear();
 }
 
 void VersionEdit::EncodeTo(std::string* dst) const {
@@ -86,6 +88,21 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     for (int i = 0; i < f.largest.size(); ++ i)
       PutLengthPrefixedSlice(dst, f.largest[i].Encode());
   }
+
+  for (size_t i = 0; i < modified_files_.size(); i++) {
+    const FileMetaData& f = modified_files_[i].second;
+    PutVarint32(dst, kModifedFile);
+    PutVarint32(dst, modified_files_[i].first);  // level
+    PutVarint64(dst, f.number);
+    PutVarint64(dst, f.file_size);
+    PutVarint32(dst, f.table_number);
+    PutVarint32(dst, f.smallest.size());
+    for (int i = 0; i < f.smallest.size(); ++ i)
+      PutLengthPrefixedSlice(dst, f.smallest[i].Encode());
+    PutVarint32(dst, f.largest.size());
+    for (int i = 0; i < f.largest.size(); ++ i)
+      PutLengthPrefixedSlice(dst, f.largest[i].Encode());
+  }  
 }
 
 static bool GetInternalKey(Slice* input, InternalKey* dst) {
@@ -97,12 +114,12 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
   }
 }
 
-static bool GetSeveralInternalKey(Slice* input, std::vector<InternalKey*> dst) {
-  size_t size = 0;
-  GetVarint32(&dst, &size);
+static bool GetSeveralInternalKey(Slice* input, std::vector<InternalKey>& dst) {
+  uint32_t size = 0;
+  GetVarint32(input, &size);
   for (size_t i = 0; i < size; ++ i) {
-    InternalKey* key;
-    if (GetInternalKey(&input, &key))
+    InternalKey key;
+    if (GetInternalKey(input, &key))
       dst.push_back(key);
     else
       return false;
@@ -196,11 +213,22 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
             GetVarint64(&input, &f.file_size) && 
             GetVarint32(&input, &f.table_number) &&
-            GetSeveralInternalKey(&input, &f.smallest) &&
-            GetSeveralInternalKey(&input, &f.largest)) {
+            GetSeveralInternalKey(&input, f.smallest) &&
+            GetSeveralInternalKey(&input, f.largest)) {
           new_files_.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";
+        }
+        break;
+      case kModifedFile:
+        if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
+            GetVarint64(&input, &f.file_size) && 
+            GetVarint32(&input, &f.table_number) &&
+            GetSeveralInternalKey(&input, f.smallest) &&
+            GetSeveralInternalKey(&input, f.largest)) {
+          modified_files_.push_back(std::make_pair(level, f));
+        } else {
+          msg = "modified-file entry";
         }
         break;
 
@@ -271,11 +299,33 @@ std::string VersionEdit::DebugString() const {
     AppendNumberTo(&r, f.smallest.size());
     r.append(" ");
     for (size_t i = 0; i < f.smallest.size(); ++ i) {
-      r.append("[")
+      r.append("[");
       r.append(f.smallest[i].DebugString());
       r.append(" .. ");
       r.append(f.largest[i].DebugString());
-      r.append("]")
+      r.append("]");
+    }
+  }
+  for (size_t i = 0; i < modified_files_.size(); i++) {
+    const FileMetaData& f = modified_files_[i].second;
+    r.append("\n  ModifiedFile: ");
+    AppendNumberTo(&r, modified_files_[i].first);
+    r.append(" ");
+    AppendNumberTo(&r, f.number);
+    r.append(" ");
+    AppendNumberTo(&r, f.file_size);
+    r.append(" ");
+    AppendNumberTo(&r, f.table_number);
+    r.append(" ");
+    assert(f.smallest.size() == f.largest.size());
+    AppendNumberTo(&r, f.smallest.size());
+    r.append(" ");
+    for (size_t i = 0; i < f.smallest.size(); ++ i) {
+      r.append("[");
+      r.append(f.smallest[i].DebugString());
+      r.append(" .. ");
+      r.append(f.largest[i].DebugString());
+      r.append("]");
     }
   }
   r.append("\n}\n");

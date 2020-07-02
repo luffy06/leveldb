@@ -54,7 +54,7 @@ class Repairer {
         owns_cache_(options_.block_cache != options.block_cache),
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
-    table_cache_ = new TableCache(dbname_, options_, 10, options_.comparator);
+    table_cache_ = new TableCache(dbname_, options_, 10);
   }
 
   ~Repairer() {
@@ -369,8 +369,8 @@ class Repairer {
     for (size_t i = 0; i < tables_.size(); i++) {
       // TODO(opt): separate out into multiple levels
       const TableInfo& t = tables_[i];
-      edit_.AddFile(0, t.meta.number, t.meta.file_size, t.meta.smallest[0],
-                    t.meta.largest[0]);
+      edit_.AddFile(0, t.meta.number, t.meta.file_size, t.meta.table_number,
+                    t.meta.smallest, t.meta.largest);
     }
 
     // fprintf(stderr, "NewDescriptor:\n%s\n", edit_.DebugString().c_str());

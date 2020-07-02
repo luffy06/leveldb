@@ -70,8 +70,10 @@ Status FooterList::DecodeFrom(Slice* input, uint32_t table_number) {
   Status result ;
   for (size_t i = 0; i < table_number; ++ i) {
     Footer footer;
-    result = footer.DecodeFrom(Slice(input + i * Footer::kEncodedLength, 
-                              Footer::kEncodedLength))
+    Slice* rest = new Slice(input->data() + i * Footer::kEncodedLength, 
+                              Footer::kEncodedLength);
+    result = footer.DecodeFrom(rest);
+    delete rest;
     if (result.ok()) {
       handle_list.push_back(footer);
     } else {

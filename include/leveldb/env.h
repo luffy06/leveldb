@@ -94,7 +94,7 @@ class LEVELDB_EXPORT Env {
   //
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) = 0;
+                                 WritableFile** result, size_t pos = 0) = 0;
 
   // Create an object that either appends to an existing file, or
   // writes to a new file (if the file does not exist to begin with).
@@ -196,7 +196,8 @@ class LEVELDB_EXPORT Env {
   // added to the same Env may run concurrently in different threads.
   // I.e., the caller may not assume that background work items are
   // serialized.
-  virtual void Schedule(void (*function)(void* arg), void* arg) = 0;
+  virtual void Schedule(void (*function)(void* arg1, void* arg2), 
+                        void* arg1, void* arg2) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
@@ -350,7 +351,8 @@ class LEVELDB_EXPORT EnvWrapper : public Env {
                              RandomAccessFile** r) override {
     return target_->NewRandomAccessFile(f, r);
   }
-  Status NewWritableFile(const std::string& f, WritableFile** r) override {
+  Status NewWritableFile(const std::string& f, WritableFile** r, 
+                          size_t pos = 0) override {
     return target_->NewWritableFile(f, r);
   }
   Status NewAppendableFile(const std::string& f, WritableFile** r) override {
@@ -382,8 +384,8 @@ class LEVELDB_EXPORT EnvWrapper : public Env {
     return target_->LockFile(f, l);
   }
   Status UnlockFile(FileLock* l) override { return target_->UnlockFile(l); }
-  void Schedule(void (*f)(void*), void* a) override {
-    return target_->Schedule(f, a);
+  void Schedule(void (*f)(void*, void*), void* a, void* b) override {
+    return target_->Schedule(f, a, b);
   }
   void StartThread(void (*f)(void*), void* a) override {
     return target_->StartThread(f, a);
