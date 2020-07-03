@@ -592,10 +592,8 @@ class WindowsEnv : public Env {
     return Status::OK();
   }
 
-  void Schedule(void (*background_work_function)(void* background_work_arg1, 
-                void* background_work_arg2),
-                void* background_work_arg1, 
-                void* background_work_arg2) override;
+  void Schedule(void (*background_work_function)(void* background_work_arg),
+                void* background_work_arg) override;
 
   void StartThread(void (*thread_main)(void* thread_main_arg),
                    void* thread_main_arg) override {
@@ -665,13 +663,11 @@ class WindowsEnv : public Env {
   //
   // This structure is thread-safe beacuse it is immutable.
   struct BackgroundWorkItem {
-    explicit BackgroundWorkItem(void (*function)(void* arg1, void* arg2), 
-        void* arg1, void* arg2)
-        : function(function), arg1(arg1), arg2(arg2) {}
+    explicit BackgroundWorkItem(void (*function)(void* arg), void* arg)
+        : function(function), arg(arg) {}
 
-    void (*const function)(void*, void*);
-    void* const arg1;
-    void* const arg2;
+    void (*const function)(void*);
+    void* const arg;
   };
 
   port::Mutex background_work_mutex_;
@@ -693,10 +689,8 @@ WindowsEnv::WindowsEnv()
       mmap_limiter_(MaxMmaps()) {}
 
 void WindowsEnv::Schedule(
-    void (*background_work_function)(void* background_work_arg1,
-      void* background_work_arg2),
-      void* background_work_arg1, 
-      void* background_work_arg2) {
+    void (*background_work_function)(void* background_work_arg),
+      void* background_work_arg) {
   background_work_mutex_.Lock();
 
   // Start the background thread, if we haven't done so already.
@@ -711,8 +705,7 @@ void WindowsEnv::Schedule(
     background_work_cv_.Signal();
   }
 
-  background_work_queue_.emplace(background_work_function, background_work_arg1, 
-                                  background_work_arg2);
+  background_work_queue_.emplace(background_work_function, background_work_arg);
   background_work_mutex_.Unlock();
 }
 
@@ -727,12 +720,11 @@ void WindowsEnv::BackgroundThreadMain() {
 
     assert(!background_work_queue_.empty());
     auto background_work_function = background_work_queue_.front().function;
-    void* background_work_arg1 = background_work_queue_.front().arg1;
-    void* background_work_arg2 = background_work_queue_.front().arg2;
+    void* background_work_arg = background_work_queue_.front().arg;
     background_work_queue_.pop();
 
     background_work_mutex_.Unlock();
-    background_work_function(background_work_arg1, background_work_arg2);
+    background_work_function(background_work_arg);
   }
 }
 

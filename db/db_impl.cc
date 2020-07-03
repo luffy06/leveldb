@@ -705,37 +705,26 @@ void DBImpl::MaybeScheduleCompaction() {
     // No work to be done
   } else {
     background_compaction_scheduled_ = true;
-    enum Direction d = kCompaction;
-    env_->Schedule(&DBImpl::BGWork, this, &d);
+    env_->Schedule(&DBImpl::BGWork, this);
   }
 }
 
-void DBImpl::MaybeScheduleFlotation() {
-  mutex_.AssertHeld();
-  background_flotation_scheduled_ = true;
-  enum Direction d = kFlotation;
-  env_->Schedule(&DBImpl::BGWork, this, &d);
+void DBImpl::BGWork(void* db) {
+  reinterpret_cast<DBImpl*>(db)->BackgroundCall();
 }
 
-void DBImpl::BGWork(void* db, void* d) {
-  reinterpret_cast<DBImpl*>(db)->BackgroundCall(*(reinterpret_cast<enum Direction*>(d)));
-}
-
-void DBImpl::BackgroundCall(enum Direction d) {
+void DBImpl::BackgroundCall() {
   MutexLock l(&mutex_);
   assert(background_compaction_scheduled_);
   if (shutting_down_.load(std::memory_order_acquire)) {
     // No more background work when shutting down.
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
-  } else if (d == kCompaction) {
+  } else {
     BackgroundCompaction();
-  } else if (d == kFlotation) {
-    BackgroundFlotation();
   }
 
   background_compaction_scheduled_ = false;
-  background_flotation_scheduled_ = false;
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
@@ -1098,6 +1087,35 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   return status;
 }
 
+void DBImpl::MaybeScheduleFlotation() {
+  mutex_.AssertHeld();
+  background_flotation_scheduled_ = true;
+  env_->Schedule(&DBImpl::BGWorkForFlotation, this);
+}
+
+void DBImpl::BGWorkForFlotation(void* db) {
+  reinterpret_cast<DBImpl*>(db)->BackgroundCallForFlotation();
+}
+
+void DBImpl::BackgroundCallForFlotation() {
+  MutexLock l(&mutex_);
+  assert(background_flotation_scheduled_c);
+  if (shutting_down_.load(std::memory_order_acquire)) {
+    // No more background work when shutting down.
+  } else if (!bg_error_.ok()) {
+    // No more background work after a background error.
+  } else {
+    BackgroundFlotation();
+  }
+
+  background_flotation_scheduled_ = false;
+
+  // Flotation may have produced too many files in a level,
+  // so reschedule another compaction if needed.
+  MaybeScheduleCompaction();
+  background_work_finished_signal_.SignalAll();
+}
+
 // TODO(floating): Annotation
 void DBImpl::BackgroundFlotation() {
   mutex_.AssertHeld();
@@ -1127,7 +1145,7 @@ void DBImpl::BackgroundFlotation() {
   if (status.ok()) {
     // Done
   } else if (shutting_down_.load(std::memory_order_acquire)) {
-    // Ignore compaction errors found during shutting down
+    // Ignore flotation errors found during shutting down
   } else {
     Log(options_.info_log, "Flotation error: %s", status.ToString().c_str());
   }

@@ -156,8 +156,8 @@ class DBImpl : public DB {
   void RecordBackgroundError(const Status& s);
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  static void BGWork(void* db, void* d);
-  void BackgroundCall(enum Direction d);
+  static void BGWork(void* db);
+  void BackgroundCall();
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
@@ -170,6 +170,8 @@ class DBImpl : public DB {
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  static void BGWorkForFlotation(void* db);
+  void BackgroundCallForFlotation();
   void BackgroundFlotation();
   void CleanupFlotation(FlotationState* floating);
   Status DoFlotationWork(FlotationState* floating)
