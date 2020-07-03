@@ -241,7 +241,7 @@ class Version::LevelFileNumIterator : public Iterator {
     EncodeFixed64(value_buf_ + 8, (*flist_)[index_]->file_size);
     // TODO(floating): Verify whether the number in FileMetaData is equal to
     // the sequence number
-    EncodeFixed32(value_buf_ + 72, (*flist_)[index_]->table_number);
+    EncodeFixed32(value_buf_ + 8, (*flist_)[index_]->table_number);
     return Slice(value_buf_, sizeof(value_buf_));
   }
   Status status() const override { return Status::OK(); }
@@ -251,20 +251,20 @@ class Version::LevelFileNumIterator : public Iterator {
   const std::vector<FileMetaData*>* const flist_;
   uint32_t index_;
 
-  // Backing store for value().  Holds the file number and size.
-  mutable char value_buf_[16];
+  // Backing store for value().  Holds the file number, size and table number.
+  mutable char value_buf_[24];
 };
 
 static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
                                  const Slice& file_value) {
   TableCache* cache = reinterpret_cast<TableCache*>(arg);
-  if (file_value.size() != 16) {
+  if (file_value.size() != 24) {
     return NewErrorIterator(
         Status::Corruption("FileReader invoked with unexpected value"));
   } else {
     return cache->NewIterator(options, DecodeFixed64(file_value.data()),
                               DecodeFixed64(file_value.data() + 8), 
-                              DecodeFixed32(file_value.data() + 72));
+                              DecodeFixed32(file_value.data() + 8));
   }
 }
 
