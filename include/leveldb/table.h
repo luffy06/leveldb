@@ -41,7 +41,7 @@ class LEVELDB_EXPORT Table {
   //
   // *file must remain live while this Table is in use.
   static Status Open(const Options& options, RandomAccessFile* file, uint64_t size, 
-                uint32_t table_number, std::vector<Table*> tables);
+                uint32_t table_number, std::vector<Table*>* tables);
 
   Table(const Table&) = delete;
   Table& operator=(const Table&) = delete;

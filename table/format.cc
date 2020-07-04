@@ -48,8 +48,9 @@ Status Footer::DecodeFrom(Slice* input) {
 void FooterList::EncodeTo(std::string* dst) const {
   const size_t original_size = dst->size();
   // Encode all footer
-  for (int i = 0; i < handle_list.size(); ++ i)
+  for (int i = 0; i < handle_list.size(); ++ i) {
     handle_list[i].EncodeTo(dst);
+  }
   // Add magic number
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber & 0xffffffffu));
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
@@ -77,7 +78,7 @@ Status FooterList::DecodeFrom(Slice* input, uint32_t table_number) {
     if (result.ok()) {
       handle_list.push_back(footer);
     } else {
-      break;
+      return Status::Corruption("not a footer");
     }
   }
   if (result.ok()) {

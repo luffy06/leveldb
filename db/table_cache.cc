@@ -59,7 +59,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
-      s = Table::Open(options_, file, file_size, table_number, tables);
+      s = Table::Open(options_, file, file_size, table_number, &tables);
     }
 
     if (!s.ok()) {
