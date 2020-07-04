@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <vector>
+
 #include "leveldb/export.h"
 #include "leveldb/iterator.h"
 
