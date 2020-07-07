@@ -454,7 +454,9 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
   state.saver.value = value;
 
   ForEachOverlapping(state.saver.user_key, state.ikey, &state, &State::Match);
-
+  if(!state.found){
+    return Status::NotFound(Slice()) ;  
+  }
   UpdateFrequency(state.last_file_read_level, state.last_file_read->number, 1);
   Slice pop_fileinfo = visit_queue_->Add(state.last_file_read_level, 
                                                   state.last_file_read->number);
@@ -478,7 +480,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     file_to_float_level_ = state.last_file_read_level;
   }
 
-  return state.found ? state.s : Status::NotFound(Slice());
+  return state.s ;
 }
 
 bool Version::UpdateStats(const GetStats& stats) {
@@ -1540,7 +1542,6 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
                        const std::vector<FileMetaData*>& level_files,
                        std::vector<FileMetaData*>* compaction_files) {
   InternalKey largest_key;
-
   // Quick return if compaction_files is empty.
   if (!FindLargestKey(icmp, *compaction_files, &largest_key)) {
     return;

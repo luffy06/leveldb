@@ -220,6 +220,7 @@ class Repairer {
 
   void ExtractMetaData() {
     for (size_t i = 0; i < table_numbers_.size(); i++) {
+      //std::cout<<table_numbers_[i]<<std::endl;
       ScanTable(table_numbers_[i]);
     }
   }
@@ -260,6 +261,9 @@ class Repairer {
     bool empty = true;
     ParsedInternalKey parsed;
     t.max_sequence = 0;
+    t.meta.smallest.resize(1);
+    t.meta.largest.resize(1);
+    t.meta.table_number = 1;
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       Slice key = iter->key();
       if (!ParseInternalKey(key, &parsed)) {
@@ -267,7 +271,7 @@ class Repairer {
             (unsigned long long)t.meta.number, EscapeString(key).c_str());
         continue;
       }
-
+      
       counter++;
       if (empty) {
         empty = false;
@@ -278,13 +282,14 @@ class Repairer {
         t.max_sequence = parsed.sequence;
       }
     }
+    //std::cout<<t.meta.file_size<<std::endl;
     if (!iter->status().ok()) {
       status = iter->status();
     }
     delete iter;
     Log(options_.info_log, "Table #%llu: %d entries %s",
         (unsigned long long)t.meta.number, counter, status.ToString().c_str());
-
+    //std::cout<<"size:"<<counter<<std::endl;
     if (status.ok()) {
       tables_.push_back(t);
     } else {
@@ -308,12 +313,18 @@ class Repairer {
     // Copy data.
     Iterator* iter = NewTableIterator(t.meta);
     int counter = 0;
+    ParsedInternalKey parsed;
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+      Slice key = iter->key();
+      if (!ParseInternalKey(key, &parsed)) {
+           continue;
+      }
       builder->Add(iter->key(), iter->value());
       counter++;
     }
+    t.meta.table_number = 1;
+    //std::cout<<"size:"<<counter<<std::endl;
     delete iter;
-
     ArchiveFile(src);
     if (counter == 0) {
       builder->Abandon();  // Nothing to save
@@ -334,10 +345,12 @@ class Repairer {
 
     if (counter > 0 && s.ok()) {
       std::string orig = TableFileName(dbname_, t.meta.number);
+      std::cout<<orig<<" "<<std::endl;
       s = env_->RenameFile(copy, orig);
       if (s.ok()) {
         Log(options_.info_log, "Table #%llu: %d entries repaired",
             (unsigned long long)t.meta.number, counter);
+        std::cout<<t.meta.number<<" "<<counter<<std::endl;
         tables_.push_back(t);
       }
     }

@@ -87,7 +87,6 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
         *(tableptr[i]) = nullptr;
     }
   }
-
   Cache::Handle* handle = nullptr;
   Status s = FindTable(file_number, file_size, table_number, &handle);
   if (!s.ok()) {

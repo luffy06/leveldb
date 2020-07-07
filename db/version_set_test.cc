@@ -198,6 +198,7 @@ class AddBoundaryInputsTest : public testing::Test {
                                    std::vector<InternalKey> largest) {
     FileMetaData* f = new FileMetaData();
     f->number = number;
+    f->table_number = 1;
     f->smallest = smallest;
     f->largest = largest;
     all_files_.push_back(f);
@@ -327,17 +328,17 @@ TEST_F(AddBoundaryInputsTest, TestDisjoinFilePointers) {
   std::vector<InternalKey> smallest2, largest2;
   smallest2.push_back(InternalKey("100", 6, kTypeValue));
   largest2.push_back(InternalKey(InternalKey("100", 5, kTypeValue)));
-  FileMetaData* f2 = CreateFileMetaData(1, smallest2, largest2);
+  FileMetaData* f2 = CreateFileMetaData(2, smallest2, largest2);
   
   std::vector<InternalKey> smallest3, largest3;
   smallest3.push_back(InternalKey("100", 2, kTypeValue));
   largest3.push_back(InternalKey(InternalKey("300", 1, kTypeValue)));
-  FileMetaData* f3 = CreateFileMetaData(1, smallest3, largest3);
+  FileMetaData* f3 = CreateFileMetaData(3, smallest3, largest3);
 
   std::vector<InternalKey> smallest4, largest4;
   smallest4.push_back(InternalKey("100", 4, kTypeValue));
   largest4.push_back(InternalKey(InternalKey("100", 3, kTypeValue)));
-  FileMetaData* f4 = CreateFileMetaData(1, smallest3, largest3);
+  FileMetaData* f4 = CreateFileMetaData(4, smallest4, largest4);
 
   level_files_.push_back(f2);
   level_files_.push_back(f3);

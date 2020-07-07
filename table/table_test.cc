@@ -6,7 +6,7 @@
 
 #include <map>
 #include <string>
-
+#include <vector>
 #include "gtest/gtest.h"
 #include "db/dbformat.h"
 #include "db/memtable.h"
@@ -231,7 +231,7 @@ class TableConstructor : public Constructor {
     source_ = new StringSource(sink.contents());
     Options table_options;
     table_options.comparator = options.comparator;
-    return Table::Open(table_options, source_, sink.contents().size(), 1, tables_);
+    return Table::Open(table_options, source_, sink.contents().size(), 1, &tables_);
   }
 
   Iterator* NewIterator() const override {

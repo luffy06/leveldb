@@ -1,7 +1,7 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
-
+#include <iostream>
 #include "leveldb/table.h"
 
 #include "leveldb/cache.h"
@@ -38,6 +38,7 @@ struct Table::Rep {
 Status Table::Open(const Options& options, RandomAccessFile* file,
                    uint64_t size, uint32_t table_number, 
                    std::vector<Table*>* tables) {
+  //std::cout<<"size:"<<size<<" "<<table_number<<std::endl;
   if (size < FooterList::encoded_length(table_number)) {
     return Status::Corruption("file is too short to be an sstable");
   }
