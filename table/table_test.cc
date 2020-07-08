@@ -261,6 +261,7 @@ class TableConstructor : public Constructor {
   void Reset() {
     for (size_t i = 0; i < tables_.size(); ++ i)
       delete tables_[i];
+    tables_.clear();
     delete source_;
     source_ = nullptr;
   }
@@ -461,7 +462,6 @@ class Harness : public testing::Test {
     std::vector<std::string> keys;
     KVMap data;
     constructor_->Finish(options_, &keys, &data);
-
     TestForwardScan(keys, data);
     TestBackwardScan(keys, data);
     TestRandomAccess(rnd, keys, data);
@@ -699,7 +699,7 @@ TEST_F(Harness, Randomized) {
     Random rnd(test::RandomSeed() + 5);
     for (int num_entries = 0; num_entries < 2000;
          num_entries += (num_entries < 50 ? 1 : 200)) {
-      if ((num_entries % 10) == 0) {
+      if ((num_entries % 10) != -1) {
         fprintf(stderr, "case %d of %d: num_entries = %d\n", (i + 1),
                 int(kNumTestArgs), num_entries);
       }

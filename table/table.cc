@@ -38,7 +38,6 @@ struct Table::Rep {
 Status Table::Open(const Options& options, RandomAccessFile* file,
                    uint64_t size, uint32_t table_number, 
                    std::vector<Table*>* tables) {
-  //std::cout<<"size:"<<size<<" "<<table_number<<std::endl;
   if (size < FooterList::encoded_length(table_number)) {
     return Status::Corruption("file is too short to be an sstable");
   }
