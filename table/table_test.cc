@@ -231,7 +231,7 @@ class TableConstructor : public Constructor {
     source_ = new StringSource(sink.contents());
     Options table_options;
     table_options.comparator = options.comparator;
-    return Table::Open(table_options, source_, sink.contents().size(), 1, tables_);
+    return Table::Open(table_options, source_, sink.contents().size(), 1, &tables_);
   }
 
   Iterator* NewIterator() const override {
@@ -262,6 +262,7 @@ class TableConstructor : public Constructor {
     for (size_t i = 0; i < tables_.size(); ++ i)
       delete tables_[i];
     delete source_;
+    tables_.clear();
     source_ = nullptr;
   }
 
