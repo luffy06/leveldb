@@ -52,7 +52,6 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
   FooterList footerlist;
   s = footerlist.DecodeFrom(&footerlist_input, table_number);
   if (!s.ok()) return s;
-
   // Read the index block
   for (size_t i = 0; i < table_number; ++ i) {
     Footer footer = footerlist.get(i);

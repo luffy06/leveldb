@@ -6,7 +6,8 @@
 #define STORAGE_LEVELDB_TABLE_TWO_LEVEL_ITERATOR_H_
 
 #include "leveldb/iterator.h"
-
+#include "db/table_cache.h"
+#include "db/version_set.h"
 namespace leveldb {
 
 struct ReadOptions;
@@ -25,7 +26,11 @@ Iterator* NewTwoLevelIterator(
     Iterator* (*block_function)(void* arg, const ReadOptions& options,
                                 const Slice& index_value),
     void* arg, const ReadOptions& options);
-
+Iterator* NewTwoLevelIterator(
+    Iterator* index_iter,
+    Iterator* (*block_function)(void* arg, const ReadOptions& options,
+                                const Slice& index_value),
+    void* arg, const ReadOptions& options,TableCache *table_cache);
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_TABLE_TWO_LEVEL_ITERATOR_H_

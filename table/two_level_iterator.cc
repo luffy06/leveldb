@@ -8,7 +8,8 @@
 #include "table/block.h"
 #include "table/format.h"
 #include "table/iterator_wrapper.h"
-
+#include "db/table_cache.h"
+#include "db/version_set.h"
 namespace leveldb {
 
 namespace {
@@ -19,7 +20,9 @@ class TwoLevelIterator : public Iterator {
  public:
   TwoLevelIterator(Iterator* index_iter, BlockFunction block_function,
                    void* arg, const ReadOptions& options);
-
+  TwoLevelIterator(Iterator* index_iter,
+                                   BlockFunction block_function, void* arg,
+                                   const ReadOptions& options,TableCache *table_cache);
   ~TwoLevelIterator() override;
 
   void Seek(const Slice& target) override;
@@ -66,6 +69,7 @@ class TwoLevelIterator : public Iterator {
   // If data_iter_ is non-null, then "data_block_handle_" holds the
   // "index_value" passed to block_function_ to create the data_iter_.
   std::string data_block_handle_;
+  TableCache *table_cache_;
 };
 
 TwoLevelIterator::TwoLevelIterator(Iterator* index_iter,
@@ -75,8 +79,15 @@ TwoLevelIterator::TwoLevelIterator(Iterator* index_iter,
       arg_(arg),
       options_(options),
       index_iter_(index_iter),
-      data_iter_(nullptr) {}
-
+      data_iter_(nullptr),table_cache_(nullptr){}
+TwoLevelIterator::TwoLevelIterator(Iterator* index_iter,
+                                   BlockFunction block_function, void* arg,
+                                   const ReadOptions& options,TableCache *table_cache)
+    : block_function_(block_function),
+      arg_(arg),
+      options_(options),
+      index_iter_(index_iter),
+      data_iter_(nullptr) ,table_cache_(table_cache){}
 TwoLevelIterator::~TwoLevelIterator() = default;
 
 void TwoLevelIterator::Seek(const Slice& target) {
@@ -153,7 +164,14 @@ void TwoLevelIterator::InitDataBlock() {
       // data_iter_ is already constructed with this iterator, so
       // no need to change anything
     } else {
-      Iterator* iter = (*block_function_)(arg_, options_, handle);
+      Iterator *iter;
+      if(table_cache_==nullptr) iter = (*block_function_)(arg_, options_, handle);
+      else{
+         uint64_t number=DecodeFixed64(handle.data()),size=DecodeFixed64(handle.data()+sizeof(uint64_t));
+      uint32_t table_number = DecodeFixed64(handle.data()+ 2*sizeof(uint64_t));
+         iter = table_cache_->NewIterator(options_,number,size,table_number);
+      }
+      //(*block_function_)(arg_, options_, handle);
       data_block_handle_.assign(handle.data(), handle.size());
       SetDataIterator(iter);
     }
@@ -167,5 +185,11 @@ Iterator* NewTwoLevelIterator(Iterator* index_iter,
                               const ReadOptions& options) {
   return new TwoLevelIterator(index_iter, block_function, arg, options);
 }
-
+Iterator* NewTwoLevelIterator(
+    Iterator* index_iter,
+    Iterator* (*block_function)(void* arg, const ReadOptions& options,
+                                const Slice& index_value),
+    void* arg, const ReadOptions& options,TableCache *table_cache){
+  return new TwoLevelIterator(index_iter, block_function, arg, options,table_cache);
+}
 }  // namespace leveldb

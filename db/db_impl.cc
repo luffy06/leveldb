@@ -877,7 +877,6 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->total_bytes += current_bytes;
   delete compact->builder;
   compact->builder = nullptr;
-
   // Finish and check for file errors
   if (s.ok()) {
     s = compact->outfile->Sync();
@@ -887,7 +886,6 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   }
   delete compact->outfile;
   compact->outfile = nullptr;
-
   if (s.ok() && current_entries > 0) {
     // Verify that the table is usable
     Iterator* iter =
@@ -902,6 +900,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
           (unsigned long long)current_bytes);
     }
   }
+
   return s;
 }
 
@@ -945,7 +944,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   }
 
   Iterator* input = versions_->MakeCompactionInputIterator(compact->compaction);
-
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
@@ -970,6 +968,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     }
 
     Slice key = input->key();
+    //if(!input->status().ok()){std::cout<<input->key().data()<<std::endl;}
     if (compact->compaction->ShouldStopBefore(key) &&
         compact->builder != nullptr) {
       status = FinishCompactionOutputFile(compact, input);
@@ -1046,10 +1045,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         }
       }
     }
-
     input->Next();
   }
-
+  
   if (status.ok() && shutting_down_.load(std::memory_order_acquire)) {
     status = Status::IOError("Deleting DB during compaction");
   }
@@ -1570,6 +1568,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   Status status = MakeRoomForWrite(updates == nullptr);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
+
   if (status.ok() && updates != nullptr) {  // nullptr batch is for compactions
     WriteBatch* write_batch = BuildBatchGroup(&last_writer);
     WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
@@ -1597,6 +1596,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
         // The state of the log file is indeterminate: the log record we
         // just added may or may not show up when the DB is re-opened.
         // So we force the DB into a mode where all future writes fail.
+        
         RecordBackgroundError(status);
       }
     }
@@ -1604,7 +1604,6 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
 
     versions_->SetLastSequence(last_sequence);
   }
-
   while (true) {
     Writer* ready = writers_.front();
     writers_.pop_front();
@@ -1733,6 +1732,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mem_->Ref();
       force = false;  // Do not force another compaction if have room
       MaybeScheduleCompaction();
+
     }
   }
   return s;

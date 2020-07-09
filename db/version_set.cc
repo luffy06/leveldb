@@ -246,7 +246,7 @@ class Version::LevelFileNumIterator : public Iterator {
   }
   Status status() const override { return Status::OK(); }
 
- private:
+ public:
   const InternalKeyComparator icmp_;
   const std::vector<FileMetaData*>* const flist_;
   uint32_t index_;
@@ -272,7 +272,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
                                             int level) const {
   return NewTwoLevelIterator(
       new LevelFileNumIterator(vset_->icmp_, &files_[level]), &GetFileIterator,
-      vset_->table_cache_, options);
+      vset_->table_cache_, options,vset_->table_cache_);
 }
 
 void Version::AddIterators(const ReadOptions& options,
@@ -1384,12 +1384,19 @@ Iterator* VersionSet::MakeCompactionInputIterator(Compaction* c) {
         // Create concatenating iterator for the files from this level
         list[num++] = NewTwoLevelIterator(
             new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
-            &GetFileIterator, table_cache_, options);
+            &GetFileIterator, table_cache_, options,table_cache_);
+        /*const std::vector<FileMetaData*>& files = c->inputs_[which];
+        for (size_t i = 0; i < files.size(); i++) {
+          list[num++] = table_cache_->NewIterator(options, files[i]->number,
+                                                  files[i]->file_size, 
+                                                  files[i]->table_number);
+        }*/
       }
     }
   }
   assert(num <= space);
   Iterator* result = NewMergingIterator(&icmp_, list, num);
+  if(!result->status().ok()) puts("wrong");
   delete[] list;
   return result;
 }
