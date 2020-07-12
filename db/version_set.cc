@@ -241,7 +241,7 @@ class Version::LevelFileNumIterator : public Iterator {
     EncodeFixed64(value_buf_ + 8, (*flist_)[index_]->file_size);
     // TODO(floating): Verify whether the number in FileMetaData is equal to
     // the sequence number
-    EncodeFixed32(value_buf_ + 8, (*flist_)[index_]->table_number);
+    EncodeFixed32(value_buf_ + 16, (*flist_)[index_]->table_number);
     return Slice(value_buf_, sizeof(value_buf_));
   }
   Status status() const override { return Status::OK(); }
