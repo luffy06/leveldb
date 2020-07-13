@@ -41,7 +41,7 @@ TableCache::TableCache(const std::string& dbname, const Options& options,
 TableCache::~TableCache() { delete cache_; }
 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
-                             uint32_t table_number, Cache::Handle** handle) {
+                             uint32_t& table_number, Cache::Handle** handle) {
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
@@ -80,7 +80,9 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 
 Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number, uint64_t file_size, 
-                                  uint32_t table_number, Table*** tableptr) {
+                                  uint32_t& table_number, Table*** tableptr) {
+  Cache::Handle* handle = nullptr;
+  Status s = FindTable(file_number, file_size, table_number, &handle);
   if (tableptr != nullptr) {
     for (size_t i = 0; i < table_number; ++ i) {
       if (tableptr[i] != nullptr)
@@ -88,8 +90,6 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
     }
   }
 
-  Cache::Handle* handle = nullptr;
-  Status s = FindTable(file_number, file_size, table_number, &handle);
   if (!s.ok()) {
     return NewErrorIterator(s);
   }
@@ -114,7 +114,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
 }
 
 Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
-                       uint64_t file_size, uint32_t table_number, 
+                       uint64_t file_size, uint32_t& table_number, 
                        const Slice& k, void* arg,
                        void (*handle_result)(void*, const Slice&,
                                              const Slice&)) {

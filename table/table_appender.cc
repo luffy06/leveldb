@@ -5,8 +5,8 @@
 namespace leveldb {
 
 TableAppender::TableAppender(const Options& options, RandomAccessFile* readfile, 
-                            uint64_t offset, int footerlist_size, 
-                            WritableFile* appendfile, int table_number)
+                            uint64_t offset, uint32_t footerlist_size, 
+                            WritableFile* appendfile, uint32_t table_number)
     : TableBuilder(options, appendfile), 
       origin_footerlist_offset_(offset), 
       origin_footerlist_size_(footerlist_size),

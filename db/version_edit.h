@@ -8,7 +8,6 @@
 #include <set>
 #include <utility>
 #include <vector>
-#include <iostream>
 
 #include "db/dbformat.h"
 
@@ -19,14 +18,6 @@ class VersionSet;
 struct FileMetaData {
   FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0), 
                     frequency(0) {}
-
-  // TODO(delete)
-  void show_infos() {
-    std::cout << "Refs: " << refs << "\nAllowed Seeks: " << allowed_seeks << 
-                "\nFrequency: " << frequency << "\nNumber: " << number <<
-                "\nFile Size: " << file_size << "\nTable Number: " << 
-                table_number << std::endl;
-  }
 
   int refs;
   int allowed_seeks;                  // Seeks allowed until compaction
@@ -72,9 +63,10 @@ class VersionEdit {
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
-  void AddFile(int level, uint64_t file, uint64_t file_size, int table_number,
-               const std::vector<InternalKey>& smallest, 
-               const std::vector<InternalKey>& largest) {
+  void AddFile(int level, uint64_t file, uint64_t file_size, 
+                uint32_t table_number,
+                const std::vector<InternalKey>& smallest, 
+                const std::vector<InternalKey>& largest) {
     FileMetaData f;
     f.number = file;
     f.file_size = file_size;

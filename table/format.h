@@ -77,12 +77,12 @@ class FooterList {
 
   void append_new_footer(const Footer& f) { handle_list.push_back(f); }
 
-  static uint32_t encoded_length(uint32_t table_number) { 
-    return table_number * Footer::kEncodedLength + 8; 
+  static uint32_t cal_encoded_length(uint32_t table_number) { 
+    return table_number * Footer::kEncodedLength + 12; 
   }
 
-  uint32_t encoded_length() { 
-    return handle_list.size() * Footer::kEncodedLength + 8; 
+  uint32_t encoded_length() const { 
+    return handle_list.size() * Footer::kEncodedLength + 12; 
   }
 
   const Footer get(int i) { return handle_list[i]; }
@@ -90,12 +90,12 @@ class FooterList {
   uint32_t size() { return handle_list.size(); }
 
   void EncodeTo(std::string* dst) const;
-  Status DecodeFrom(Slice* input, uint32_t table_number);
+  Status DecodeFrom(Slice* input, uint32_t& table_number);
 
  private:
   std::vector<Footer> handle_list;
-  //first ->meta_index_handle_ second -> index_handle;
-//  BlockHandle index_handle_;
+
+  Status DecodeTrailer(const char* str_ptr, uint32_t& table_number);
 };
 // kTableMagicNumber was picked by running
 //    echo http://code.google.com/p/leveldb/ | sha1sum

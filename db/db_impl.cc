@@ -890,9 +890,10 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
   if (s.ok() && current_entries > 0) {
     // Verify that the table is usable
+    uint32_t table_number = 1;
     Iterator* iter =
         table_cache_->NewIterator(ReadOptions(), output_number, current_bytes, 
-                                  1);
+                                  table_number);
     s = iter->status();
     delete iter;
     if (s.ok()) {
@@ -1192,7 +1193,8 @@ void DBImpl::GetFlotationInteratorRange(Iterator* iter,
 // TODO(floating): Annotation
 Status DBImpl::OpenFlotationAppendFile(FlotationState* floating, 
                                       uint64_t file_number, uint64_t offset, 
-                                      int footerlist_size, int table_number) {
+                                      uint32_t footerlist_size, 
+                                      uint32_t& table_number) {
   assert(floating != nullptr);
   assert(floating->appender == nullptr);
   
@@ -1331,8 +1333,8 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
         FileMetaData* fmd = floating->flotation->input(l, i);
         status = OpenFlotationAppendFile(floating, fmd->number,
                     fmd->file_size - 
-                    FooterList::encoded_length(fmd->table_number), 
-                    FooterList::encoded_length(fmd->table_number),
+                    FooterList::cal_encoded_length(fmd->table_number), 
+                    FooterList::cal_encoded_length(fmd->table_number),
                     fmd->table_number);
         if (!status.ok()) {
           break;
@@ -1379,7 +1381,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   stats.micros = env_->NowMicros() - start_micros - imm_micros;
   for (int l = floating->flotation->level() - 1; l >= 0; --l) {
     for (int i = 0; i < floating->flotation->num_input_files(l); i++) {
-      stats.bytes_read += FooterList::encoded_length(
+      stats.bytes_read += FooterList::cal_encoded_length(
                                 floating->flotation->input(l, i)->table_number);
     }
   }
@@ -1484,7 +1486,6 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 
   bool have_stat_update = false;
   Version::GetStats stats;
-
   // Unlock while reading from files and memtables
   {
     mutex_.Unlock();

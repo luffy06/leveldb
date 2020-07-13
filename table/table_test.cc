@@ -231,7 +231,9 @@ class TableConstructor : public Constructor {
     source_ = new StringSource(sink.contents());
     Options table_options;
     table_options.comparator = options.comparator;
-    return Table::Open(table_options, source_, sink.contents().size(), 1, &tables_);
+    uint32_t table_number = 1;
+    return Table::Open(table_options, source_, sink.contents().size(), 
+                        table_number, &tables_);
   }
 
   Iterator* NewIterator() const override {

@@ -8,7 +8,7 @@
 #define STORAGE_LEVELDB_DB_TABLE_CACHE_H_
 
 #include <stdint.h>
-#include <iostream>
+
 #include <string>
 
 #include "db/dbformat.h"
@@ -33,13 +33,13 @@ class TableCache {
   // by the cache and should not be deleted, and is valid for as long as the
   // returned iterator is live.
   Iterator* NewIterator(const ReadOptions& options, uint64_t file_number,
-                        uint64_t file_size, uint32_t table_number, 
+                        uint64_t file_size, uint32_t& table_number, 
                         Table*** tableptr = nullptr);
 
   // If a seek to internal key "k" in specified file finds an entry,
   // call (*handle_result)(arg, found_key, found_value).
   Status Get(const ReadOptions& options, uint64_t file_number,
-             uint64_t file_size, uint32_t table_number, const Slice& k, void* arg,
+             uint64_t file_size, uint32_t& table_number, const Slice& k, void* arg,
              void (*handle_result)(void*, const Slice&, const Slice&));
 
   // Evict any entry for the specified file number
@@ -47,7 +47,7 @@ class TableCache {
 
  private:
   Status FindTable(uint64_t file_number, uint64_t file_size, 
-                    uint32_t table_number, Cache::Handle** handle);
+                    uint32_t& table_number, Cache::Handle** handle);
 
   Env* const env_;
   const std::string dbname_;

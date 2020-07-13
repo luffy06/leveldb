@@ -224,7 +224,7 @@ class Repairer {
     }
   }
 
-  Iterator* NewTableIterator(const FileMetaData& meta) {
+  Iterator* NewTableIterator(FileMetaData& meta) {
     // Same as compaction iterators: if paranoid_checks are on, turn
     // on checksum verification.
     ReadOptions r;
@@ -236,6 +236,7 @@ class Repairer {
   void ScanTable(uint64_t number) {
     TableInfo t;
     t.meta.number = number;
+    t.meta.table_number = 0;
     std::string fname = TableFileName(dbname_, number);
     Status status = env_->GetFileSize(fname, &t.meta.file_size);
     if (!status.ok()) {
@@ -257,9 +258,12 @@ class Repairer {
     // Extract metadata by scanning through table.
     int counter = 0;
     Iterator* iter = NewTableIterator(t.meta);
+    assert(t.meta.table_number != 0);
     bool empty = true;
     ParsedInternalKey parsed;
     t.max_sequence = 0;
+    t.meta.smallest.resize(t.meta.table_number);
+    t.meta.largest.resize(t.meta.table_number);
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       Slice key = iter->key();
       if (!ParseInternalKey(key, &parsed)) {
@@ -269,6 +273,7 @@ class Repairer {
       }
 
       counter++;
+      // TODO(floating): BUG-Need to assure the table number of the decoded key?
       if (empty) {
         empty = false;
         t.meta.smallest[0].DecodeFrom(key);

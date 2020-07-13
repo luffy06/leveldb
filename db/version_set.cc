@@ -6,7 +6,6 @@
 
 #include <stdio.h>
 
-#include <iostream>
 #include <algorithm>
 
 #include "db/filename.h"
@@ -262,9 +261,10 @@ static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
     return NewErrorIterator(
         Status::Corruption("FileReader invoked with unexpected value"));
   } else {
+    uint32_t table_number = DecodeFixed32(file_value.data() + 8);
     return cache->NewIterator(options, DecodeFixed64(file_value.data()),
                               DecodeFixed64(file_value.data() + 8), 
-                              DecodeFixed32(file_value.data() + 8));
+                              table_number);
   }
 }
 
@@ -455,27 +455,29 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
 
   ForEachOverlapping(state.saver.user_key, state.ikey, &state, &State::Match);
 
-  UpdateFrequency(state.last_file_read_level, state.last_file_read->number, 1);
-  Slice pop_fileinfo = visit_queue_->Add(state.last_file_read_level, 
-                                                  state.last_file_read->number);
-  if (!pop_fileinfo.empty()) {
-    uint32_t pop_level;
-    uint64_t pop_number;
-    if (GetVarint32(&pop_fileinfo, &pop_level) 
-      && GetVarint64(&pop_fileinfo, &pop_number))
-      UpdateFrequency(pop_level, pop_number, -1);
-    else
-      state.s = Status::Corruption(Slice("Update Frequency Error"));
-  }
+  if (state.found) {
+    UpdateFrequency(state.last_file_read_level, state.last_file_read->number, 1);
+    Slice pop_fileinfo = visit_queue_->Add(state.last_file_read_level, 
+                                                    state.last_file_read->number);
+    if (!pop_fileinfo.empty()) {
+      uint32_t pop_level;
+      uint64_t pop_number;
+      if (GetVarint32(&pop_fileinfo, &pop_level) 
+        && GetVarint64(&pop_fileinfo, &pop_number))
+        UpdateFrequency(pop_level, pop_number, -1);
+      else
+        state.s = Status::Corruption(Slice("Update Frequency Error"));
+    }
 
-  int max_frequency = 0;
-  for (size_t i = 0; i < files_[state.last_file_read_level].size(); ++ i) {
-    max_frequency = std::max(max_frequency, 
-                              files_[state.last_file_read_level][i]->frequency);
-  }
-  if (state.last_file_read->frequency > max_frequency * options.floating_rate) {
-    file_to_float_ = state.last_file_read;
-    file_to_float_level_ = state.last_file_read_level;
+    int max_frequency = 0;
+    for (size_t i = 0; i < files_[state.last_file_read_level].size(); ++ i) {
+      max_frequency = std::max(max_frequency, 
+                                files_[state.last_file_read_level][i]->frequency);
+    }
+    if (state.last_file_read->frequency > max_frequency * options.floating_rate) {
+      file_to_float_ = state.last_file_read;
+      file_to_float_level_ = state.last_file_read_level;
+    }
   }
 
   return state.found ? state.s : Status::NotFound(Slice());
@@ -817,7 +819,6 @@ class VersionSet::Builder {
 
       // Add modified files
       for (const auto& modified_file : *modified_files) {
-        modified_file->show_infos();
         for (uint32_t i = 0; i < v->files_[level].size(); ++ i) {
           if (v->files_[level][i]->number == modified_file->number) {
             MaybeMergeFile(v->files_[level][i], modified_file);

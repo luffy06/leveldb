@@ -51,6 +51,8 @@ void FooterList::EncodeTo(std::string* dst) const {
   for (int i = 0; i < handle_list.size(); ++ i) {
     handle_list[i].EncodeTo(dst);
   }
+  // Add table number
+  PutFixed32(dst, static_cast<uint32_t>(handle_list.size()));
   // Add magic number
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber & 0xffffffffu));
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
@@ -58,17 +60,32 @@ void FooterList::EncodeTo(std::string* dst) const {
   (void)original_size;  // Disable unused variable warning.
 }
 
-Status FooterList::DecodeFrom(Slice* input, uint32_t table_number) {
-  const char* magic_ptr = input->data() + Footer::kEncodedLength * table_number;
-  const uint32_t magic_lo = DecodeFixed32(magic_ptr);
-  const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
+Status FooterList::DecodeTrailer(const char* str_ptr, uint32_t& table_number) {
+  table_number = DecodeFixed32(str_ptr);
+  const uint32_t magic_lo = DecodeFixed32(str_ptr + 4);
+  const uint32_t magic_hi = DecodeFixed32(str_ptr + 8);
   const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32) |
                           (static_cast<uint64_t>(magic_lo)));
   if (magic != kTableMagicNumber) {
     return Status::Corruption("not an sstable (bad magic number)");
   }
+  return Status::OK();
+}
+
+Status FooterList::DecodeFrom(Slice* input, uint32_t& table_number) {
+  uint32_t decoded_table_number = 0;
+  const char* trailer_ptr = input->data() + input->size() - 12;
+  Status result = DecodeTrailer(trailer_ptr, decoded_table_number);
+  assert(decoded_table_number != 0);
+  if (table_number != 0) {
+    assert(decoded_table_number == table_number);
+  } else {
+    table_number = decoded_table_number;
+  }
+  if (!result.ok()) {
+    return result;
+  }
   // Decode each footer
-  Status result ;
   for (size_t i = 0; i < table_number; ++ i) {
     Footer footer;
     Slice* rest = new Slice(input->data() + i * Footer::kEncodedLength, 
@@ -83,7 +100,7 @@ Status FooterList::DecodeFrom(Slice* input, uint32_t table_number) {
   }
   if (result.ok()) {
     // Skip the padding part of each footer
-    const char* end = magic_ptr + 8;
+    const char* end = trailer_ptr + 12;
     *input = Slice(end, input->data() + input->size() - end);
   }
   return result;

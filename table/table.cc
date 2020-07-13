@@ -36,13 +36,13 @@ struct Table::Rep {
 };
 
 Status Table::Open(const Options& options, RandomAccessFile* file,
-                   uint64_t size, uint32_t table_number, 
+                   uint64_t size, uint32_t& table_number, 
                    std::vector<Table*>* tables) {
-  if (size < FooterList::encoded_length(table_number)) {
+  if (size < FooterList::cal_encoded_length(table_number)) {
     return Status::Corruption("file is too short to be an sstable");
   }
 
-  int footerlist_size = FooterList::encoded_length(table_number);
+  int footerlist_size = FooterList::cal_encoded_length(table_number);
   char footerlist_space[footerlist_size];
   Slice footerlist_input;
   Status s = file->Read(size - footerlist_size, footerlist_size,

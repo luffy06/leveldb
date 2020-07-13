@@ -23,8 +23,8 @@ class WritableFile;
 class LEVELDB_EXPORT TableAppender : public TableBuilder {
  public:
   TableAppender(const Options& options, RandomAccessFile* readfile, 
-                uint64_t offset, int footerlist_size, WritableFile* appendfile,
-                int table_number);
+                uint64_t offset, uint32_t footerlist_size, 
+                WritableFile* appendfile, uint32_t table_number);
 
   TableAppender(const TableAppender&) = delete;
   TableAppender& operator=(const TableAppender&) = delete;
@@ -38,8 +38,8 @@ class LEVELDB_EXPORT TableAppender : public TableBuilder {
                         std::string& footer_encoding) override;
 
   uint64_t origin_footerlist_offset_;
-  int origin_footerlist_size_;
-  int table_number_;
+  uint32_t origin_footerlist_size_;
+  uint32_t table_number_;
   RandomAccessFile* readfile_;
 
 };
