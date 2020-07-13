@@ -314,6 +314,9 @@ class Repairer {
     Iterator* iter = NewTableIterator(t.meta);
     int counter = 0;
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+      if (!ParseInternalKey(iter->key(), &parsed)) {
+        assert(false);
+      }
       builder->Add(iter->key(), iter->value());
       counter++;
     }

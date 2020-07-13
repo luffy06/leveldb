@@ -144,14 +144,13 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
   uint32_t tag;
 
   // Temporary storage for parsing
-  int level;
-  uint64_t number;
-  Slice str;
-
   while (msg == nullptr && GetVarint32(&input, &tag)) {
+    int level;
+    uint64_t number;
     FileMetaData f;
+    Slice str;
     InternalKey key;
-  
+
     switch (tag) {
       case kComparator:
         if (GetLengthPrefixedSlice(&input, &str)) {

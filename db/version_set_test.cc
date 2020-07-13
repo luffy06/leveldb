@@ -198,6 +198,8 @@ class AddBoundaryInputsTest : public testing::Test {
                                    std::vector<InternalKey> largest) {
     FileMetaData* f = new FileMetaData();
     f->number = number;
+    assert(smallest.size() == largest.size());
+    f->table_number = largest.size();
     f->smallest = smallest;
     f->largest = largest;
     all_files_.push_back(f);

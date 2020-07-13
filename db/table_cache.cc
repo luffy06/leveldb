@@ -89,7 +89,6 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
         *(tableptr[i]) = nullptr;
     }
   }
-
   if (!s.ok()) {
     return NewErrorIterator(s);
   }
