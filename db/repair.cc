@@ -313,6 +313,7 @@ class Repairer {
     // Copy data.
     Iterator* iter = NewTableIterator(t.meta);
     int counter = 0;
+    ParsedInternalKey parsed;
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       if (!ParseInternalKey(iter->key(), &parsed)) {
         assert(false);
