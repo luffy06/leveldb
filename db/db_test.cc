@@ -119,7 +119,9 @@ class SpecialEnv : public EnvWrapper {
 
   bool count_random_reads_;
   AtomicCounter random_read_counter_;
-
+  void sync(){
+     puts("sync");
+  }
   explicit SpecialEnv(Env* base)
       : EnvWrapper(base),
         delay_data_sync_(false),
@@ -177,6 +179,7 @@ class SpecialEnv : public EnvWrapper {
       Status Close() { return base_->Close(); }
       Status Flush() { return base_->Flush(); }
       Status Sync() {
+        puts("SYNC");
         if (env_->manifest_sync_error_.load(std::memory_order_acquire)) {
           return Status::IOError("simulated sync error");
         } else {
@@ -537,7 +540,7 @@ class DBTest : public testing::Test {
   int option_config_;
 };
 
-TEST_F(DBTest, Empty) {
+/*TEST_F(DBTest, Empty) {
   do {
     ASSERT_TRUE(db_ != nullptr);
     ASSERT_EQ("NOT_FOUND", Get("foo"));
@@ -1766,7 +1769,6 @@ TEST_F(DBTest, WriteSyncError) {
   options.env = env_;
   Reopen(&options);
   env_->data_sync_error_.store(true, std::memory_order_release);
-
   // (b) Normal write should succeed
   WriteOptions w;
   ASSERT_LEVELDB_OK(db_->Put(w, "k1", "v1"));
@@ -1919,7 +1921,7 @@ TEST_F(DBTest, BloomFilter) {
   delete options.block_cache;
   delete options.filter_policy;
 }
-
+*/
 // Multi-threaded test:
 namespace {
 
@@ -1985,7 +1987,7 @@ static void MTThreadBody(void* arg) {
 
 }  // namespace
 
-TEST_F(DBTest, MultiThreaded) {
+/*TEST_F(DBTest, MultiThreaded) {
   do {
     // Initialize state
     MTState mt;
@@ -2015,7 +2017,7 @@ TEST_F(DBTest, MultiThreaded) {
       }
     }
   } while (ChangeOptions());
-}
+}*/
 
 namespace {
 typedef std::map<std::string, std::string> KVMap;
@@ -2162,7 +2164,7 @@ static bool CompareIterators(int step, DB* model, DB* db,
   delete dbiter;
   return ok;
 }
-
+/*
 TEST_F(DBTest, Randomized) {
   Random rnd(test::RandomSeed());
   do {
@@ -2171,6 +2173,7 @@ TEST_F(DBTest, Randomized) {
     const Snapshot* model_snap = nullptr;
     const Snapshot* db_snap = nullptr;
     std::string k, v;
+    std::vector<std::string> pk,pv;
     for (int step = 0; step < N; step++) {
       if (step % 100 == 0) {
         fprintf(stderr, "Step %d of %d\n", step, N);
@@ -2229,8 +2232,32 @@ TEST_F(DBTest, Randomized) {
     if (model_snap != nullptr) model.ReleaseSnapshot(model_snap);
     if (db_snap != nullptr) db_->ReleaseSnapshot(db_snap);
   } while (ChangeOptions());
+}*/
+TEST_F(DBTest, Randomized2) {
+  Random rnd(test::RandomSeed());
+  do {
+      int N=1e7;
+      std::string k,v;
+      std::map<std::string,std::string> mp;
+      std::vector<std::string> pv,pk;
+      for (int step = 0; step < N; step++) {
+           k = RandomKey(&rnd);
+        v = RandomString(
+            &rnd, rnd.OneIn(20) ? 100 + rnd.Uniform(100) : rnd.Uniform(8));
+           ASSERT_LEVELDB_OK(Put(k, v));
+           if(step%1000==0){
+                 pk.push_back(k);
+           }
+           mp[k]=v;
+      }
+      for(int i=0;i<N;i++){
+         k=pk[i/1000],v=mp[k];
+         //std::cout<<v<<" "<<k<<std::endl;
+         ASSERT_EQ(v,Get(k));
+      }
+      break;
+  } while (ChangeOptions());
 }
-
 std::string MakeKey(unsigned int num) {
   char buf[30];
   snprintf(buf, sizeof(buf), "%016u", num);
