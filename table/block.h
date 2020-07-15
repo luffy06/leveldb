@@ -19,7 +19,6 @@ class Block {
  public:
   // Initialize the block with the specified contents.
   explicit Block(const BlockContents& contents);
-
   Block(const Block&) = delete;
   Block& operator=(const Block&) = delete;
 

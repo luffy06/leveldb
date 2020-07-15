@@ -75,6 +75,7 @@ static inline const char* DecodeEntry(const char* p, const char* limit,
 }
 
 class Block::Iter : public Iterator {
+ public :uint64_t r,w;
  private:
   const Comparator* const comparator_;
   const char* const data_;       // underlying block contents
@@ -166,6 +167,7 @@ class Block::Iter : public Iterator {
     // with a key < target
     uint32_t left = 0;
     uint32_t right = num_restarts_ - 1;
+    r=0;
     while (left < right) {
       uint32_t mid = (left + right + 1) / 2;
       uint32_t region_offset = GetRestartPoint(mid);
@@ -178,6 +180,7 @@ class Block::Iter : public Iterator {
         return;
       }
       Slice mid_key(key_ptr, non_shared);
+      r+=sizeof(char)*mid_key.size();
       if (Compare(mid_key, target) < 0) {
         // Key at "mid" is smaller than "target".  Therefore all
         // blocks before "mid" are uninteresting.

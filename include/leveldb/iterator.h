@@ -24,7 +24,7 @@ namespace leveldb {
 class LEVELDB_EXPORT Iterator {
  public:
   Iterator();
-
+  uint64_t r,w;
   Iterator(const Iterator&) = delete;
   Iterator& operator=(const Iterator&) = delete;
 

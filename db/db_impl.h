@@ -32,9 +32,15 @@ class DBImpl : public DB {
 
   DBImpl(const DBImpl&) = delete;
   DBImpl& operator=(const DBImpl&) = delete;
-
+  uint64_t getw(){
+    return 0;
+  }
+  uint64_t getr(){
+     return total_read_bytes;
+  }
   ~DBImpl() override;
-
+  uint64_t total_read_bytes;
+  uint64_t total_write_bytes;
   // Implementations of the DB interface
   Status Put(const WriteOptions&, const Slice& key,
              const Slice& value) override;

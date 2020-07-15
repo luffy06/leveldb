@@ -383,7 +383,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
                     std::string* value, GetStats* stats) {
   stats->seek_file = nullptr;
   stats->seek_file_level = -1;
-
+  vset_->r=0;
   struct State {
     Saver saver;
     GetStats* stats;
@@ -391,7 +391,6 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     Slice ikey;
     FileMetaData* last_file_read;
     int last_file_read_level;
-
     VersionSet* vset;
     Status s;
     bool found;
@@ -413,6 +412,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
                                                 f->file_size, f->table_number, 
                                                 state->ikey, &state->saver, 
                                                 SaveValue);
+      state->vset->r+=state->vset->table_cache_->r;
       if (!state->s.ok()) {
         state->found = true;
         return false;
@@ -475,9 +475,11 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     max_frequency = std::max(max_frequency, 
                               files_[state.last_file_read_level][i]->frequency);
   }
-  if (state.last_file_read->frequency > max_frequency * options.floating_rate) {
+  //max_frequency * options.floating_rate
+  if (state.last_file_read->frequency > 10000) {
     file_to_float_ = state.last_file_read;
     file_to_float_level_ = state.last_file_read_level;
+    //std::cout<<file_to_float_level_<<" "<<&vset_<<std::endl;
   }
 
   return state.s ;
@@ -900,6 +902,7 @@ VersionSet::~VersionSet() {
 
 void VersionSet::AppendVersion(Version* v) {
   // Make "v" current
+  //std::cout<<v<<" "<<v->file_to_float_level_<<std::endl;
   assert(v->refs_ == 0);
   assert(v != current_);
   if (current_ != nullptr) {
@@ -1462,7 +1465,7 @@ Compaction* VersionSet::PickCompaction() {
     current_->GetOverlappingInputs(0, &smallest, &largest, &c->inputs_[0]);
     assert(!c->inputs_[0].empty());
   }
-
+  //std::cout<<"Compaction:"<<&current_<<" "<<current_->file_to_float_level_<<std::endl;
   SetupOtherInputs(c);
 
   return c;
@@ -1470,6 +1473,8 @@ Compaction* VersionSet::PickCompaction() {
 
 // TODO(floating): Annotation
 Flotation* VersionSet::PickFlotation() {
+  std::cout<<&current_<<std::endl;
+  if(current_->file_to_float_level_==-1) return nullptr;
   Flotation* f = new Flotation(options_, 
                       current_->file_to_float_, 
                       current_->file_to_float_level_);

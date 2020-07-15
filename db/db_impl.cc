@@ -185,7 +185,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       background_flotation_scheduled_(false),
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
-                               &internal_comparator_)) {}
+                               &internal_comparator_)) {total_read_bytes=total_write_bytes=0;}
 
 DBImpl::~DBImpl() {
   // Wait for background work to finish.
@@ -781,6 +781,7 @@ void DBImpl::BackgroundCompaction() {
   } else {
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
+    
     if (!status.ok()) {
       RecordBackgroundError(status);
     }
@@ -1122,15 +1123,16 @@ void DBImpl::BackgroundFlotation() {
     CompactMemTable();
     return;
   }
-
+  puts("YES");
   Flotation* f = versions_->PickFlotation();
-  
   Status status;
   if (f == nullptr) {
     // Nothing to do
   } else {
+    puts("null");
     FlotationState* floating = new FlotationState(f);
     status = DoFlotationWork(floating);
+    puts("null");
     if (!status.ok()) {
       RecordBackgroundError(status);
     }
@@ -1160,6 +1162,7 @@ void DBImpl::CleanupFlotation(FlotationState* floating) {
     assert(floating->readfile == nullptr);
     assert(floating->appendfile == nullptr);
   }
+  
   delete floating->readfile;
   delete floating->appendfile;
   delete floating;
@@ -1296,7 +1299,6 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     deleted.push_back(false);
     input->Next();
   }
-
   mutex_.Unlock();
   for (int l = floating->flotation->level() - 1; l >= 0; -- l) {
     InternalKey smallest, largest;
@@ -1306,7 +1308,22 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     mutex_.Lock();
     versions_->SetupOverlapInput(smallest, largest, l, floating->flotation);
     mutex_.Unlock();
-
+    if(l==0){
+       for(int i=0;i<floating->flotation->num_input_files(l);i++)
+            for(int j=i+1;j<floating->flotation->num_input_files(l)-i;j++){
+           	FileMetaData* fmd = floating->flotation->input(l, j-1);
+                FileMetaData* fmd2 = floating->flotation->input(l, j);
+                FileMetaData* fmd3;
+                if(user_comparator()->Compare(fmd->smallest[0].user_key(),fmd2->smallest[0].user_key())>0){
+                          *fmd3=*fmd2;*fmd2=*fmd;*fmd=*fmd2;
+                          
+                }
+                else if(user_comparator()->Compare(fmd->smallest[0].user_key(),fmd2->smallest[0].user_key())==0){
+		     if(user_comparator()->Compare(fmd->largest[0].user_key(),fmd2->largest[0].user_key())>0)
+			  *fmd3=*fmd2;*fmd2=*fmd;*fmd=*fmd2;
+		}
+            }    
+    }
     ParsedInternalKey ikey;
 
     for (int i = 0, j = 0; i < floating->flotation->num_input_files(l) && 
@@ -1489,11 +1506,12 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
     if (mem->Get(lkey, value, &s)) {
-      // Done
+      // Done 
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
       s = current->Get(options, lkey, value, &stats);
+      total_read_bytes +=current->vset()->r;
       have_stat_update = true;
     }
     mutex_.Lock();
@@ -1542,7 +1560,7 @@ void DBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
 
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
-  return DB::Put(o, key, val);
+   return DB::Put(o, key, val);
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {

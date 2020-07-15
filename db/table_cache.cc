@@ -47,7 +47,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
   *handle = cache_->Lookup(key);
-
+  r+=sizeof(buf);
   if (*handle == nullptr) {
     std::string fname = TableFileName(dbname_, file_number);
     RandomAccessFile* file = nullptr;
@@ -118,6 +118,7 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
                        const Slice& k, void* arg,
                        void (*handle_result)(void*, const Slice&,
                                              const Slice&)) {
+  r=0;
   Cache::Handle* handle = nullptr;
   Status s = FindTable(file_number, file_size, table_number, &handle);
   if (s.ok()) {
@@ -126,6 +127,7 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
     for (int i = 0; i < t_list.size(); ++ i) {
       // TODO(floating): process it based on the range 
       s = t_list[i]->InternalGet(options, k, arg, handle_result);
+      r += t_list[i]->r;
       if (s.ok()) // DEBUG: verify the condition
         break;
     }

@@ -40,12 +40,12 @@ class LEVELDB_EXPORT Table {
   // for the duration of the returned table's lifetime.
   //
   // *file must remain live while this Table is in use.
+  uint64_t r,w;
   static Status Open(const Options& options, RandomAccessFile* file, uint64_t size, 
                 uint32_t table_number, std::vector<Table*>* tables);
 
   Table(const Table&) = delete;
   Table& operator=(const Table&) = delete;
-
   ~Table();
 
   // Returns a new iterator over the table contents.
@@ -62,7 +62,7 @@ class LEVELDB_EXPORT Table {
   // bytes, and so includes effects like compression of the underlying data.
   // E.g., the approximate offset of the last key in the table will
   // be close to the file length.
-  uint64_t ApproximateOffsetOf(const Slice& key, bool& found) const;
+  uint64_t ApproximateOffsetOf(const Slice& key, bool& found);
 
  private:
   friend class TableCache;

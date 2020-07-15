@@ -41,11 +41,10 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
   if (size < FooterList::encoded_length(table_number)) {
     return Status::Corruption("file is too short to be an sstable");
   }
-
   int footerlist_size = FooterList::encoded_length(table_number);
   char footerlist_space[footerlist_size];
   Slice footerlist_input;
-  Status s = file->Read(size - footerlist_size, footerlist_size,
+  Status s = file->Read(size - footerlist_size , footerlist_size,
                         &footerlist_input, footerlist_space);
   if (!s.ok()) return s;
 
@@ -107,6 +106,7 @@ void Table::ReadMeta(const Footer& footer) {
   std::string key = "filter.";
   key.append(rep_->options.filter_policy->Name());
   iter->Seek(key);
+  r+=iter->r;
   if (iter->Valid() && iter->key() == Slice(key)) {
     ReadFilter(iter->value());
   }
@@ -223,6 +223,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
   Status s;
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
   iiter->Seek(k);
+  r+=iiter->r;
   if (iiter->Valid()) {
     Slice handle_value = iiter->value();
     FilterBlockReader* filter = rep_->filter;
@@ -231,8 +232,10 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
         !filter->KeyMayMatch(handle.offset(), k)) {
       // Not found
     } else {
+      if(filter != nullptr) r += filter->r;
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
+      r+=block_iter->r;
       if (block_iter->Valid()) {
         (*handle_result)(arg, block_iter->key(), block_iter->value());
       }
@@ -247,10 +250,11 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
   return s;
 }
 
-uint64_t Table::ApproximateOffsetOf(const Slice& key, bool& found) const {
+uint64_t Table::ApproximateOffsetOf(const Slice& key, bool& found)  {
   Iterator* index_iter =
       rep_->index_block->NewIterator(rep_->options.comparator);
   index_iter->Seek(key);
+  r+=index_iter->r;
   uint64_t result;
   if (index_iter->Valid()) {
     found = true;

@@ -84,7 +84,7 @@ class Version {
     FileMetaData* seek_file;
     int seek_file_level;
   };
-
+  VersionSet * vset(){return vset_;}
   // Append to *iters a sequence of iterators that will
   // yield the contents of this Version when merged together.
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
@@ -155,7 +155,6 @@ class Version {
   Version& operator=(const Version&) = delete;
 
   ~Version();
-
   Iterator* NewConcatenatingIterator(const ReadOptions&, int level) const;
 
   // Call func(arg, level, f) for every file that overlaps user_key in
@@ -199,7 +198,7 @@ class VersionSet {
              TableCache* table_cache, const InternalKeyComparator*);
   VersionSet(const VersionSet&) = delete;
   VersionSet& operator=(const VersionSet&) = delete;
-
+  uint64_t w,r;
   ~VersionSet();
 
   // Apply *edit to the current version to form a new descriptor that
