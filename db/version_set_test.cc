@@ -339,7 +339,7 @@ TEST_F(AddBoundaryInputsTest, TestDisjoinFilePointers) {
   std::vector<InternalKey> smallest4, largest4;
   smallest4.push_back(InternalKey("100", 4, kTypeValue));
   largest4.push_back(InternalKey(InternalKey("100", 3, kTypeValue)));
-  FileMetaData* f4 = CreateFileMetaData(1, smallest3, largest3);
+  FileMetaData* f4 = CreateFileMetaData(1, smallest4, largest4);
 
   level_files_.push_back(f2);
   level_files_.push_back(f3);
