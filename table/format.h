@@ -90,12 +90,11 @@ class FooterList {
   uint32_t size() { return handle_list.size(); }
 
   void EncodeTo(std::string* dst) const;
-  Status DecodeFrom(Slice* input, uint32_t& table_number);
+  Status DecodeFrom(Slice* input, uint32_t table_number);
+  static Status DecodeTrailer(const char* str_ptr, uint32_t& table_number);
 
  private:
   std::vector<Footer> handle_list;
-
-  Status DecodeTrailer(const char* str_ptr, uint32_t& table_number);
 };
 // kTableMagicNumber was picked by running
 //    echo http://code.google.com/p/leveldb/ | sha1sum

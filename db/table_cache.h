@@ -34,7 +34,11 @@ class TableCache {
   // returned iterator is live.
   Iterator* NewIterator(const ReadOptions& options, uint64_t file_number,
                         uint64_t file_size, uint32_t& table_number, 
-                        Table*** tableptr = nullptr);
+                        std::vector<Table*>* tableptr = nullptr);
+
+  Status NewEachIterator(const ReadOptions& options, uint64_t file_number, 
+                          uint64_t file_size, uint32_t& table_number, 
+                          std::vector<Iterator*>* table_iterators);
 
   // If a seek to internal key "k" in specified file finds an entry,
   // call (*handle_result)(arg, found_key, found_value).

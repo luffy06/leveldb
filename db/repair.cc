@@ -37,6 +37,7 @@
 #include "leveldb/comparator.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
+#include "table/merger.h"
 
 namespace leveldb {
 
@@ -224,13 +225,15 @@ class Repairer {
     }
   }
 
-  Iterator* NewTableIterator(FileMetaData& meta) {
+  std::vector<Iterator*> NewTableIterator(FileMetaData& meta) {
     // Same as compaction iterators: if paranoid_checks are on, turn
     // on checksum verification.
     ReadOptions r;
     r.verify_checksums = options_.paranoid_checks;
-    return table_cache_->NewIterator(r, meta.number, meta.file_size, 
-                                      meta.table_number);
+    std::vector<Iterator*> iters;
+    Status s = table_cache_->NewEachIterator(r, meta.number, meta.file_size, 
+                                          meta.table_number, &iters);
+    return iters;
   }
 
   void ScanTable(uint64_t number) {
@@ -257,36 +260,39 @@ class Repairer {
 
     // Extract metadata by scanning through table.
     int counter = 0;
-    Iterator* iter = NewTableIterator(t.meta);
+    std::vector<Iterator*> iters = NewTableIterator(t.meta);
     assert(t.meta.table_number != 0);
     bool empty = true;
     ParsedInternalKey parsed;
     t.max_sequence = 0;
     t.meta.smallest.resize(t.meta.table_number);
     t.meta.largest.resize(t.meta.table_number);
-    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-      Slice key = iter->key();
-      if (!ParseInternalKey(key, &parsed)) {
-        Log(options_.info_log, "Table #%llu: unparsable key %s",
-            (unsigned long long)t.meta.number, EscapeString(key).c_str());
-        continue;
-      }
+    for (size_t i = 0; i < iters.size(); ++ i) {
+      Iterator* iter = iters[i];
+      for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+        Slice key = iter->key();
+        if (!ParseInternalKey(key, &parsed)) {
+          Log(options_.info_log, "Table #%llu: unparsable key %s",
+              (unsigned long long)t.meta.number, EscapeString(key).c_str());
+          continue;
+        }
 
-      counter++;
-      // TODO(floating): BUG-Need to assure the table number of the decoded key?
-      if (empty) {
-        empty = false;
-        t.meta.smallest[0].DecodeFrom(key);
+        counter++;
+        // TODO(floating): BUG-Need to assure the table number of the decoded key?
+        if (empty) {
+          empty = false;
+          t.meta.smallest[i].DecodeFrom(key);
+        }
+        t.meta.largest[i].DecodeFrom(key);
+        if (parsed.sequence > t.max_sequence) {
+          t.max_sequence = parsed.sequence;
+        }
       }
-      t.meta.largest[0].DecodeFrom(key);
-      if (parsed.sequence > t.max_sequence) {
-        t.max_sequence = parsed.sequence;
+      if (!iter->status().ok()) {
+        status = iter->status();
       }
+      delete iter;
     }
-    if (!iter->status().ok()) {
-      status = iter->status();
-    }
-    delete iter;
     Log(options_.info_log, "Table #%llu: %d entries %s",
         (unsigned long long)t.meta.number, counter, status.ToString().c_str());
 
@@ -311,13 +317,11 @@ class Repairer {
     TableBuilder* builder = new TableBuilder(options_, file);
 
     // Copy data.
-    Iterator* iter = NewTableIterator(t.meta);
+    std::vector<Iterator*> iters = NewTableIterator(t.meta);
+    Iterator* iter = NewMergingIterator(options_.comparator, &iters[0], 
+                                        iters.size());
     int counter = 0;
-    ParsedInternalKey parsed;
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-      if (!ParseInternalKey(iter->key(), &parsed)) {
-        assert(false);
-      }
       builder->Add(iter->key(), iter->value());
       counter++;
     }

@@ -80,13 +80,15 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 
 Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number, uint64_t file_size, 
-                                  uint32_t& table_number, Table*** tableptr) {
+                                  uint32_t& table_number, 
+                                  std::vector<Table*>* tableptr) {
   Cache::Handle* handle = nullptr;
   Status s = FindTable(file_number, file_size, table_number, &handle);
   if (tableptr != nullptr) {
-    for (size_t i = 0; i < table_number; ++ i) {
-      if (tableptr[i] != nullptr)
-        *(tableptr[i]) = nullptr;
+    assert(tableptr->size() == table_number);
+    for (size_t i = 0; i < tableptr->size(); ++ i) {
+      if ((*tableptr)[i] != nullptr)
+        (*tableptr)[i] = nullptr;
     }
   }
   if (!s.ok()) {
@@ -105,11 +107,33 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
                                         &table_iterators[0], 
                                         table_iterators.size());
   if (tableptr != nullptr) {
+    assert(tableptr->size() == table_number);
+    assert(tables.size() == table_number);
+    tableptr->resize(table_number);
     for (size_t i = 0; i < tables.size(); ++ i) {
-      *(tableptr[i]) = tables[i];
+      (*tableptr)[i] = tables[i];
     }    
   }
   return result;
+}
+
+Status TableCache::NewEachIterator(const ReadOptions& options,
+                                      uint64_t file_number, uint64_t file_size, 
+                                      uint32_t& table_number, 
+                                      std::vector<Iterator*>* table_iterators) {
+  Cache::Handle* handle = nullptr;
+  Status s = FindTable(file_number, file_size, table_number, &handle);
+  if (!s.ok()) {
+    return s;
+  }
+  std::vector<Table*> tables = reinterpret_cast<TableAndFile*>(
+                                                cache_->Value(handle))->tables;
+  for (int i = 0; i < tables.size(); ++ i) {
+    Iterator* iter = tables[i]->NewIterator(options);
+    table_iterators->push_back(iter);
+    iter->RegisterCleanup(&UnrefEntry, cache_, handle);
+  }
+  return Status::OK();
 }
 
 Status TableCache::Get(const ReadOptions& options, uint64_t file_number,

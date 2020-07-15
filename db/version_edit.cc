@@ -114,15 +114,16 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
   }
 }
 
-static bool GetSeveralInternalKey(Slice* input, std::vector<InternalKey>& dst) {
+static bool GetSeveralInternalKey(Slice* input, std::vector<InternalKey>* dst) {
   uint32_t size = 0;
   GetVarint32(input, &size);
   for (size_t i = 0; i < size; ++ i) {
     InternalKey key;
-    if (GetInternalKey(input, &key))
-      dst.push_back(key);
-    else
+    if (GetInternalKey(input, &key)) {
+      dst->push_back(key);
+    } else {
       return false;
+    }
   }
   return true;
 }
@@ -213,8 +214,8 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
             GetVarint64(&input, &f.file_size) && 
             GetVarint32(&input, &f.table_number) &&
-            GetSeveralInternalKey(&input, f.smallest) &&
-            GetSeveralInternalKey(&input, f.largest)) {
+            GetSeveralInternalKey(&input, &f.smallest) &&
+            GetSeveralInternalKey(&input, &f.largest)) {
           new_files_.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";
@@ -224,8 +225,8 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
             GetVarint64(&input, &f.file_size) && 
             GetVarint32(&input, &f.table_number) &&
-            GetSeveralInternalKey(&input, f.smallest) &&
-            GetSeveralInternalKey(&input, f.largest)) {
+            GetSeveralInternalKey(&input, &f.smallest) &&
+            GetSeveralInternalKey(&input, &f.largest)) {
           modified_files_.push_back(std::make_pair(level, f));
         } else {
           msg = "modified-file entry";

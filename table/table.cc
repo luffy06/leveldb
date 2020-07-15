@@ -42,6 +42,19 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     return Status::Corruption("file is too short to be an sstable");
   }
 
+  if (table_number == 0) {
+    int trailer_size = 12;
+    char trailer_space[trailer_size];
+    Slice trailer_input;
+    Status s = file->Read(size - trailer_size, trailer_size,
+                          &trailer_input, trailer_space);
+    if (!s.ok()) return s;
+
+    s = FooterList::DecodeTrailer(trailer_input.data(), table_number);
+    if (!s.ok()) return s;
+  }
+
+  assert(table_number != 0);
   int footerlist_size = FooterList::cal_encoded_length(table_number);
   char footerlist_space[footerlist_size];
   Slice footerlist_input;

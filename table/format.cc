@@ -72,16 +72,12 @@ Status FooterList::DecodeTrailer(const char* str_ptr, uint32_t& table_number) {
   return Status::OK();
 }
 
-Status FooterList::DecodeFrom(Slice* input, uint32_t& table_number) {
+Status FooterList::DecodeFrom(Slice* input, uint32_t table_number) {
   uint32_t decoded_table_number = 0;
   const char* trailer_ptr = input->data() + input->size() - 12;
   Status result = DecodeTrailer(trailer_ptr, decoded_table_number);
   assert(decoded_table_number != 0);
-  if (table_number != 0) {
-    assert(decoded_table_number == table_number);
-  } else {
-    table_number = decoded_table_number;
-  }
+  assert(decoded_table_number == table_number);
   if (!result.ok()) {
     return result;
   }

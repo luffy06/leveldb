@@ -1268,11 +1268,11 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
       } else {
         // "ikey" falls in the range for this table.  Add the
         // approximate offset of "ikey" within the table.
-        Table** tableptr = new Table*[files[i]->table_number];
+        std::vector<Table*> tableptr;
         Iterator* iter = table_cache_->NewIterator(
             ReadOptions(), files[i]->number, files[i]->file_size, 
             files[i]->table_number, &tableptr);
-        if (tableptr != nullptr) {
+        if (tableptr.size() != 0) {
           bool found = false;
           uint64_t table_offset = 0;
           for (size_t j = 0; j < files[i]->table_number; ++ j) {
