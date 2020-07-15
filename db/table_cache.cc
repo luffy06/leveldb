@@ -9,7 +9,7 @@
 #include "leveldb/table.h"
 #include "table/merger.h"
 #include "util/coding.h"
-
+#include "table/format.h"
 namespace leveldb {
 
 struct TableAndFile {
@@ -60,6 +60,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
+      r+=FooterList::encoded_length(table_number) *sizeof(char);
       s = Table::Open(options_, file, file_size, table_number, &tables);
     }
 
