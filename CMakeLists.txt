@@ -351,6 +351,7 @@ if(LEVELDB_BUILD_TESTS)
 
   if(NOT BUILD_SHARED_LIBS)
     leveldb_test("db/autocompact_test.cc")
+    leveldb_test("db/autofloat_test.cc")
     leveldb_test("db/corruption_test.cc")
     leveldb_test("db/db_test.cc")
     leveldb_test("db/dbformat_test.cc")
