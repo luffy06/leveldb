@@ -1390,10 +1390,11 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
         mem->Ref();
         if (imm != nullptr) imm->Ref();
 
-        mutex_.Unlock();
         LookupKey lkey(ikey.user_key, ikey.sequence);
         bool drop = false;
         std::string* value;
+
+        mutex_.Unlock();
         if (mem->Get(lkey, value, &status)) {
           drop = true;
         } else if (imm != nullptr && imm->Get(lkey, value, &status)) {
