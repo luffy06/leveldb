@@ -1,7 +1,6 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
-
 #include "db/db_impl.h"
 
 #include <stdint.h>
@@ -1123,7 +1122,7 @@ void DBImpl::BackgroundFlotation() {
 
   if (imm_ != nullptr) {
     CompactMemTable();
-    return;
+    return ;
   }
 
   Flotation* f = versions_->PickFlotation();
@@ -1169,25 +1168,22 @@ void DBImpl::CleanupFlotation(FlotationState* floating) {
 }
 
 // TODO(floating): Annotation
-void DBImpl::GetFlotationInteratorRange(Iterator* iter, 
+void DBImpl::GetFlotationIteratorRange(std::vector<std::pair<Slice, Slice>> kvs, 
                                         std::vector<bool> deleted, 
                                         InternalKey& smallest, 
                                         InternalKey& largest) {
+  assert(kvs.size() > 0);
   int i = 0;
-  iter->SeekToFirst();
-  while (iter->Valid() && i < deleted.size() && deleted[i]) {
+  while (i < kvs.size() && i < deleted.size() && deleted[i]) {
     ++ i;
-    iter->Next();
   }
-  smallest.DecodeFrom(iter->key());
+  smallest.DecodeFrom(kvs[i].first);
 
-  i = deleted.size() - 1;
-  iter->SeekToLast();
-  while (iter->Valid() && i >= 0 && deleted[i]) {
-    iter->Prev();
+  i = kvs.size() - 1;
+  while (i >= 0 && deleted[i]) {
     -- i;
   }
-  largest.DecodeFrom(iter->key());
+  largest.DecodeFrom(kvs[i].first);
 }
 
 // TODO(floating): Annotation
@@ -1212,15 +1208,14 @@ Status DBImpl::OpenFlotationAppendFile(FlotationState* floating,
 }
 
 // TODO(floating): Annotation
-Status DBImpl::FinishFlotationAppendFile(FlotationState* floating, 
-                                          Iterator* input) {
+Status DBImpl::FinishFlotationAppendFile(FlotationState* floating) {
   assert(floating != nullptr);
   assert(floating->readfile != nullptr);
   assert(floating->appendfile != nullptr);
   assert(floating->appender != nullptr);
 
   // Check for iterator errors
-  Status s = input->status();
+  Status s = Status::OK();
   if (s.ok()) {
     s = floating->appender->Finish();
   } else {
@@ -1295,26 +1290,30 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
 
   Status status;
   std::vector<bool> deleted;
+  std::vector<std::pair<Slice, Slice>> floating_keys;
+  size_t index = 0;
   input->SeekToFirst();
   while (input->Valid()) {
     deleted.push_back(false);
+    floating_keys.push_back(std::make_pair(input->key(), input->value()));
     input->Next();
   }
+  delete input;
 
   mutex_.Unlock();
   for (int l = floating->flotation->level() - 1; l >= 0; -- l) {
     InternalKey smallest, largest;
-    GetFlotationInteratorRange(input, deleted, smallest, largest);
-    input->SeekToFirst();
+    GetFlotationIteratorRange(floating_keys, deleted, smallest, largest);
+    index = 0;
 
     mutex_.Lock();
     versions_->SetupOverlapInput(smallest, largest, l, floating->flotation);
     mutex_.Unlock();
 
     ParsedInternalKey ikey;
-
     for (int i = 0, j = 0; i < floating->flotation->num_input_files(l) && 
-        input->Valid() && !shutting_down_.load(std::memory_order_acquire) && 
+        index < floating_keys.size() && 
+        !shutting_down_.load(std::memory_order_acquire) && 
         j < deleted.size(); ) {
       // Prioritize immutable compaction work
       if (has_imm_.load(std::memory_order_relaxed)) {
@@ -1328,7 +1327,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
         mutex_.Unlock();
         imm_micros += (env_->NowMicros() - imm_start);
       }
-      
+
       if (floating->appender == nullptr) {
         FileMetaData* fmd = floating->flotation->input(l, i);
         status = OpenFlotationAppendFile(floating, fmd->number,
@@ -1341,7 +1340,14 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
         }
       }
 
-      Slice key = input->key();
+      // Deleted First
+      while (index < floating_keys.size() && deleted[j]) {
+        ++ index;
+        ++ j;
+      }
+
+      Slice key = floating_keys[index].first;
+      Slice value = floating_keys[index].second;
       if (!ParseInternalKey(key, &ikey)) {
         // Do not hide error keys
       } else {
@@ -1350,22 +1356,17 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
               user_comparator()->Compare(ikey.user_key, 
               floating->flotation->input(l, i)->smallest[0].user_key()) >= 0) {
           // This key should be appended to the file of input[l][i]
-          floating->appender->Add(key, input->value());
+          floating->appender->Add(key, value);
           deleted[j] = true;
         } else if (user_comparator()->Compare(ikey.user_key, 
                     floating->flotation->input(l, i)->largest[0].user_key()) > 0) {
-          status = FinishFlotationAppendFile(floating, input);
+          status = FinishFlotationAppendFile(floating);
           if (!status.ok()) {
             break;
           }
           ++ i;
           continue;
         }
-      }
-      // Deleted First
-      while (input->Valid() && deleted[j]) {
-        input->Next();
-        ++ j;
       }
     }
   }
@@ -1374,7 +1375,14 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     status = Status::IOError("Deleting DB during flotation");
   }
   if (status.ok() && floating->appender != nullptr) {
-    FinishFlotationAppendFile(floating, input);
+    FinishFlotationAppendFile(floating);
+  }
+
+  for (size_t i = 0; i < floating_keys.size(); ++ i) {
+    std::pair<Slice, Slice> kv = floating_keys[i];
+    if (!deleted[i]) {
+      Put(WriteOptions(), kv.first, kv.second);
+    }
   }
 
   FlotationStats stats;

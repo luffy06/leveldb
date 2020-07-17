@@ -177,12 +177,13 @@ class DBImpl : public DB {
   Status DoFlotationWork(FlotationState* floating)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  void GetFlotationInteratorRange(Iterator* iter, std::vector<bool> deleted, 
-                          InternalKey& smallest, InternalKey& largest);
+  void GetFlotationIteratorRange(std::vector<std::pair<Slice, Slice>> kvs, 
+                                  std::vector<bool> deleted, 
+                                  InternalKey& smallest, InternalKey& largest);
   Status OpenFlotationAppendFile(FlotationState* floating, uint64_t file_number, 
                                   uint64_t offset, uint32_t footerlist_size, 
                                   uint32_t& table_number);
-  Status FinishFlotationAppendFile(FlotationState* floating, Iterator* input);
+  Status FinishFlotationAppendFile(FlotationState* floating);
   Status InstallFlotationResults(FlotationState* floating)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
