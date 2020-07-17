@@ -1378,12 +1378,41 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     FinishFlotationAppendFile(floating);
   }
 
+  mutex_.Lock();
   for (size_t i = 0; i < floating_keys.size(); ++ i) {
     std::pair<Slice, Slice> kv = floating_keys[i];
     if (!deleted[i]) {
-      Put(WriteOptions(), kv.first, kv.second);
+      ParsedInternalKey ikey;
+      if (ParseInternalKey(kv.first, &ikey)) {
+        
+        MemTable* mem = mem_;
+        MemTable* imm = imm_;
+        mem->Ref();
+        if (imm != nullptr) imm->Ref();
+
+        mutex_.Unlock();
+        LookupKey lkey(ikey.user_key, ikey.sequence);
+        bool drop = false;
+        std::string* value;
+        if (mem->Get(lkey, value, &status)) {
+          drop = true;
+        } else if (imm != nullptr && imm->Get(lkey, value, &status)) {
+          drop = true;
+        }
+        mutex_.Lock();
+
+        mem->Unref();
+        if (imm != nullptr) imm->Unref();
+
+        if (!drop) {
+          Put(WriteOptions(), ikey.user_key.ToString(), kv.second);
+        }
+      } else {
+        return Status::Corruption("Parse Key Error");
+      }
     }
   }
+  mutex_.Unlock();
 
   FlotationStats stats;
   stats.micros = env_->NowMicros() - start_micros - imm_micros;

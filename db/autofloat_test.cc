@@ -65,16 +65,16 @@ void AutoFloatTest::DoReads(int n) {
     for (int j = 0; j < i + 1; ++ j) {
       std::string value_in_db;
       ASSERT_LEVELDB_OK(db_->Get(ReadOptions(), Key(i), &value_in_db));
-      ASSERT_EQ(value_in_db, value);
+      ASSERT_EQ(value, value_in_db);
     }
   }
 
   // Test floating
-  for (int i = 0; i < kCount; -- i) {
+  for (int i = 0; i < kCount; ++ i) {
     for (int j = 0; j < kCount - i; ++ j) {
       std::string value_in_db;
       ASSERT_LEVELDB_OK(db_->Get(ReadOptions(), Key(i), &value_in_db));
-      ASSERT_EQ(value_in_db, value);
+      ASSERT_EQ(value, value_in_db);
     }
   }
 }
