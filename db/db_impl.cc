@@ -564,6 +564,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   if (s.ok() && meta.file_size > 0) {
     const Slice min_user_key = meta.smallest[0].user_key();
     const Slice max_user_key = meta.largest[0].user_key();
+    meta.table_number = 1;
     if (base != nullptr) {
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
@@ -1197,7 +1198,9 @@ Status DBImpl::OpenFlotationAppendFile(FlotationState* floating,
   floating->additions.push_back(FlotationState::Addition(file_number));
   std::string fname = TableFileName(dbname_, file_number);
   Status s = env_->NewWritableFile(fname, &floating->appendfile, offset);
-  s = env_->NewRandomAccessFile(fname, &floating->readfile);
+  if (s.ok()) {
+    s = env_->NewRandomAccessFile(fname, &floating->readfile);
+  }
   if (s.ok()) {
     floating->appender = new TableAppender(options_, floating->readfile, offset,
                                             footerlist_size, 
@@ -1271,6 +1274,8 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
+  assert(floating->flotation->smallest().user_key() != nullptr);
+  assert(floating->flotation->largest().user_key() != nullptr);
   Log(options_.info_log, "Floating file from level %d Range: [%s, %s]",
       floating->flotation->level(), 
       floating->flotation->smallest().user_key().data(),
@@ -1328,22 +1333,14 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
         imm_micros += (env_->NowMicros() - imm_start);
       }
 
-      if (floating->appender == nullptr) {
-        FileMetaData* fmd = floating->flotation->input(l, i);
-        status = OpenFlotationAppendFile(floating, fmd->number,
-                    fmd->file_size - 
-                    FooterList::cal_encoded_length(fmd->table_number), 
-                    FooterList::cal_encoded_length(fmd->table_number),
-                    fmd->table_number);
-        if (!status.ok()) {
-          break;
-        }
-      }
-
       // Deleted First
       while (index < floating_keys.size() && deleted[j]) {
         ++ index;
         ++ j;
+      }
+
+      if (index == floating_keys.size()) {
+        break;
       }
 
       Slice key = floating_keys[index].first;
@@ -1355,6 +1352,18 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
               floating->flotation->input(l, i)->largest[0].user_key()) <= 0 && 
               user_comparator()->Compare(ikey.user_key, 
               floating->flotation->input(l, i)->smallest[0].user_key()) >= 0) {
+          
+          if (floating->appender == nullptr) {
+            FileMetaData* fmd = floating->flotation->input(l, i);
+            status = OpenFlotationAppendFile(floating, fmd->number,
+                        fmd->file_size - 
+                        FooterList::cal_encoded_length(fmd->table_number), 
+                        FooterList::cal_encoded_length(fmd->table_number),
+                        fmd->table_number);
+            if (!status.ok()) {
+              break;
+            }
+          }
           // This key should be appended to the file of input[l][i]
           floating->appender->Add(key, value);
           deleted[j] = true;
@@ -1379,42 +1388,31 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   }
 
   mutex_.Lock();
+  MemTable* new_mem = new MemTable(internal_comparator_);
+  new_mem->Ref();
+  Version* base = versions_->current();
+  base->Ref();
+  
   for (size_t i = 0; i < floating_keys.size(); ++ i) {
-    std::pair<Slice, Slice> kv = floating_keys[i];
     if (!deleted[i]) {
+      Slice key = floating_keys[i].first;
+      Slice value = floating_keys[i].second;
+
       ParsedInternalKey ikey;
-      if (ParseInternalKey(kv.first, &ikey)) {
-        
-        MemTable* mem = mem_;
-        MemTable* imm = imm_;
-        mem->Ref();
-        if (imm != nullptr) imm->Ref();
-
-        LookupKey lkey(ikey.user_key, ikey.sequence);
-        bool drop = false;
-        std::string* value;
-
-        mutex_.Unlock();
-        if (mem->Get(lkey, value, &status)) {
-          drop = true;
-        } else if (imm != nullptr && imm->Get(lkey, value, &status)) {
-          drop = true;
-        }
-        mutex_.Lock();
-
-        mem->Unref();
-        if (imm != nullptr) imm->Unref();
-
-        if (!drop) {
-          Put(WriteOptions(), ikey.user_key.ToString(), kv.second);
-        }
+      if (!ParseInternalKey(key, &ikey)) {
+        // Nothing to do
       } else {
-        return Status::Corruption("Parse Key Error");
+        new_mem->Add(ikey.sequence, ikey.type, ikey.user_key, value);
       }
     }
   }
-  mutex_.Unlock();
 
+  Status s = WriteLevel0Table(new_mem, floating->flotation->edit(), base);
+  
+  base->Unref();
+  new_mem->Unref();
+  mutex_.Unlock();
+  
   FlotationStats stats;
   stats.micros = env_->NowMicros() - start_micros - imm_micros;
   for (int l = floating->flotation->level() - 1; l >= 0; --l) {
