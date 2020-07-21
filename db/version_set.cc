@@ -1463,11 +1463,14 @@ Compaction* VersionSet::PickCompaction() {
 
 // TODO(floating): Annotation
 Flotation* VersionSet::PickFlotation() {
-  Flotation* f = new Flotation(options_, 
-                      current_->file_to_float_, 
-                      current_->file_to_float_level_);
-  f->input_version_ = current_;
-  f->input_version_->Ref();
+  Flotation* f = nullptr;
+  if (current_->file_to_float_ != nullptr) {
+    f = new Flotation(options_, 
+                        current_->file_to_float_, 
+                        current_->file_to_float_level_);
+    f->input_version_ = current_;
+    f->input_version_->Ref();
+  }
   return f;
 }
 
