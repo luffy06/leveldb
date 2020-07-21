@@ -56,7 +56,8 @@ void AutoFloatTest::DoReads(int n) {
 
   // Fill database
   for (int i = 0; i < kCount; i++) {
-    ASSERT_LEVELDB_OK(db_->Put(WriteOptions(), Key(i), value));
+    int shuffled_key = random() % kCount + i;
+    ASSERT_LEVELDB_OK(db_->Put(WriteOptions(), Key(shuffled_key), value));
   }
   // ASSERT_LEVELDB_OK(dbi->TEST_CompactMemTable());
 
