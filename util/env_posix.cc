@@ -253,7 +253,11 @@ class PosixWritableFile final : public WritableFile {
         fd_(fd),
         is_manifest_(IsManifest(filename)),
         filename_(std::move(filename)),
-        dirname_(Dirname(filename_)) {}
+        dirname_(Dirname(filename_)) {
+    if (pos_ != 0) {
+      ::lseek(fd, pos_, SEEK_CUR);
+    }
+  }
 
   ~PosixWritableFile() override {
     if (fd_ >= 0) {

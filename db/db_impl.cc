@@ -1169,7 +1169,7 @@ void DBImpl::CleanupFlotation(FlotationState* floating) {
 }
 
 // TODO(floating): Annotation
-void DBImpl::GetFlotationIteratorRange(std::vector<std::pair<Slice, Slice>> kvs, 
+void DBImpl::GetFlotationIteratorRange(std::vector<std::pair<std::string, std::string>> kvs, 
                                         std::vector<bool> deleted, 
                                         InternalKey& smallest, 
                                         InternalKey& largest) {
@@ -1250,8 +1250,8 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
   mutex_.AssertHeld();
   Log(options_.info_log, "Flotation level: %d, Range: [%s, %s] => %lld bytes",
       floating->flotation->level(), 
-      floating->flotation->smallest().user_key().data(),
-      floating->flotation->largest().user_key().data(), 
+      floating->flotation->smallest().user_key().ToString().data(),
+      floating->flotation->largest().user_key().ToString().data(), 
       static_cast<long long>(floating->total_bytes));
 
   // Add flotation outputs
@@ -1276,10 +1276,11 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
 
   assert(floating->flotation->smallest().user_key() != nullptr);
   assert(floating->flotation->largest().user_key() != nullptr);
+  
   Log(options_.info_log, "Floating file from level %d Range: [%s, %s]",
       floating->flotation->level(), 
-      floating->flotation->smallest().user_key().data(),
-      floating->flotation->largest().user_key().data());
+      floating->flotation->smallest().user_key().ToString().data(),
+      floating->flotation->largest().user_key().ToString().data());
 
   assert(versions_->NumLevelFiles(floating->flotation->level()) > 0);
   assert(floating->appender == nullptr);
@@ -1295,12 +1296,14 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
 
   Status status;
   std::vector<bool> deleted;
-  std::vector<std::pair<Slice, Slice>> floating_keys;
+  std::vector<std::pair<std::string, std::string>> floating_keys;
   size_t index = 0;
   input->SeekToFirst();
   while (input->Valid()) {
     deleted.push_back(false);
-    floating_keys.push_back(std::make_pair(input->key(), input->value()));
+    floating_keys.push_back(std::make_pair(
+                    std::string(input->key().data(), input->key().size()), 
+                    std::string(input->value().data(), input->value().size())));
     input->Next();
   }
   delete input;
