@@ -54,10 +54,20 @@ void AutoFloatTest::DoReads(int n) {
   std::string value(kValueSize, 'x');
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
 
+  std::vector<int> keys;
+  for (int i = 0; i < kCount; ++ i) {
+    keys.push_back(i);
+  }
+
+  // Shuffle keys
+  for (int i = 0; i < kCount; ++ i) {
+    int j = random() % (kCount - i) + i;
+    std::swap(keys[i], keys[j]);
+  }
+
   // Fill database
-  for (int i = 0; i < kCount; i++) {
-    int shuffled_key = random() % kCount + i;
-    ASSERT_LEVELDB_OK(db_->Put(WriteOptions(), Key(shuffled_key), value));
+  for (int i = 0; i < keys.size(); i++) {
+    ASSERT_LEVELDB_OK(db_->Put(WriteOptions(), Key(keys[i]), value));
   }
   // ASSERT_LEVELDB_OK(dbi->TEST_CompactMemTable());
 
