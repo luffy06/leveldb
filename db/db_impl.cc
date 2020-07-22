@@ -91,13 +91,14 @@ struct DBImpl::CompactionState {
 struct DBImpl::FlotationState{
   // Files produced by compaction
   struct Addition {
+    int level;
     uint64_t number;
     InternalKey smallest;
     InternalKey largest;
     uint64_t appending_bytes;
 
-    Addition(uint64_t n) 
-      : number(n), 
+    Addition(int l, uint64_t n) 
+      : level(l), number(n), 
         appending_bytes(0) { }
   };
 
@@ -1188,14 +1189,14 @@ void DBImpl::GetFlotationIteratorRange(std::vector<std::pair<std::string, std::s
 }
 
 // TODO(floating): Annotation
-Status DBImpl::OpenFlotationAppendFile(FlotationState* floating, 
+Status DBImpl::OpenFlotationAppendFile(FlotationState* floating, int level, 
                                       uint64_t file_number, uint64_t offset, 
                                       uint32_t footerlist_size, 
                                       uint32_t& table_number) {
   assert(floating != nullptr);
   assert(floating->appender == nullptr);
   
-  floating->additions.push_back(FlotationState::Addition(file_number));
+  floating->additions.push_back(FlotationState::Addition(level, file_number));
   std::string fname = TableFileName(dbname_, file_number);
   Status s = env_->NewWritableFile(fname, &floating->appendfile, offset);
   if (s.ok()) {
@@ -1262,7 +1263,7 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
     std::vector<InternalKey> smallest, largest;
     smallest.push_back(add.smallest);
     largest.push_back(add.largest);
-    floating->flotation->edit()->ModifyFile(level, add.number, 
+    floating->flotation->edit()->ModifyFile(add.level, add.number, 
                                             add.appending_bytes, smallest, 
                                             largest);
   }
@@ -1358,7 +1359,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
           
           if (floating->appender == nullptr) {
             FileMetaData* fmd = floating->flotation->input(l, i);
-            status = OpenFlotationAppendFile(floating, fmd->number,
+            status = OpenFlotationAppendFile(floating, l, fmd->number,
                         fmd->file_size - 
                         FooterList::cal_encoded_length(fmd->table_number), 
                         FooterList::cal_encoded_length(fmd->table_number),

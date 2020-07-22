@@ -472,8 +472,11 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
 
     int min_frequency = 0;
     for (size_t i = 0; i < files_[state.last_file_read_level].size(); ++ i) {
-      min_frequency = std::min(min_frequency, 
-                                files_[state.last_file_read_level][i]->frequency);
+      if (min_frequency == 0)
+        min_frequency = files_[state.last_file_read_level][i]->frequency;
+      else
+        min_frequency = std::min(min_frequency, 
+                              files_[state.last_file_read_level][i]->frequency);
     }
     if (state.last_file_read->frequency > min_frequency * options.floating_rate) {
       file_to_float_ = state.last_file_read;
