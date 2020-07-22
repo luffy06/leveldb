@@ -550,7 +550,7 @@ class PosixEnv : public Env {
   Status NewWritableFile(const std::string& filename, WritableFile** result, 
                           size_t pos = 0) override {
     int fd = ::open(filename.c_str(),
-                    O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
+                    O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
     if (fd < 0) {
       *result = nullptr;
       return PosixError(filename, errno);
