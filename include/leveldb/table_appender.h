@@ -32,6 +32,11 @@ class LEVELDB_EXPORT TableAppender : public TableBuilder {
   // REQUIRES: Either Finish() or Abandon() has been called.
   ~TableAppender();
 
+  uint64_t ChangedFileSize() const {
+    assert(FileSize() >= origin_footerlist_size_);
+    return FileSize() - origin_footerlist_size_;
+  }
+
  private:
   Status InitialFooter(BlockHandle metaindex_block_handle, 
                         BlockHandle index_block_handle,
@@ -41,7 +46,7 @@ class LEVELDB_EXPORT TableAppender : public TableBuilder {
   uint32_t origin_footerlist_size_;
   uint32_t table_number_;
   RandomAccessFile* readfile_;
-
+  FooterList footerlist_;
 };
 
 }  // namespace leveldb

@@ -1225,7 +1225,7 @@ Status DBImpl::FinishFlotationAppendFile(FlotationState* floating) {
   } else {
     floating->appender->Abandon();
   }
-  const uint64_t current_bytes = floating->appender->FileSize();
+  const uint64_t current_bytes = floating->appender->ChangedFileSize();
   floating->current_addition()->appending_bytes = current_bytes;
   floating->total_bytes += current_bytes;
   delete floating->appender;
