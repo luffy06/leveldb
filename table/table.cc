@@ -3,7 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "leveldb/table.h"
-
+#include <iostream>
 #include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
@@ -61,24 +61,26 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
   Status s = file->Read(size - footerlist_size, footerlist_size,
                         &footerlist_input, footerlist_space);
   if (!s.ok()) return s;
-
   FooterList footerlist;
   s = footerlist.DecodeFrom(&footerlist_input, table_number);
   if (!s.ok()) return s;
-
   // Read the index block
   for (size_t i = 0; i < table_number; ++ i) {
     Footer footer = footerlist.get(i);
     BlockContents index_block_contents;
     if (s.ok()) {
+      if(table_number>1)
+      std::cout<<i<<std::endl;
       ReadOptions opt;
       if (options.paranoid_checks) {
         opt.verify_checksums = true;
       }
       s = ReadBlock(file, opt, footer.index_handle(), &index_block_contents);
     }
-
+   
     if (s.ok()) {
+      if(table_number>1)
+      std::cout<<i<<std::endl;
       // We've successfully read the footer and the index block: we're
       // ready to serve requests.
       Block* index_block = new Block(index_block_contents);
@@ -95,7 +97,6 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
       tables->push_back(table);
     }
   }
-
   return s;
 }
 

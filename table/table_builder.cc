@@ -3,9 +3,8 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "leveldb/table_builder.h"
-
+#include <iostream>
 #include <assert.h>
-
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
@@ -68,7 +67,13 @@ TableBuilder::TableBuilder(const Options& options, WritableFile* file)
     rep_->filter_block->StartBlock(0);
   }
 }
-
+TableBuilder::TableBuilder(const Options& options, WritableFile* file,uint64_t offset)
+    : rep_(new Rep(options, file)) {
+  rep_->offset = offset ;
+  if (rep_->filter_block != nullptr) {
+    rep_->filter_block->StartBlock(0);
+  }
+}
 TableBuilder::~TableBuilder() {
   assert(rep_->closed);  // Catch errors where caller forgot to call Finish()
   delete rep_->filter_block;
@@ -259,6 +264,9 @@ Status TableBuilder::Finish() {
     }
     r->status = r->file->Append(footer_encoding);
     if (r->status.ok()) {
+      if(footer_encoding.size()==92){
+          std::cout<<r->offset<<std::endl;
+      }
       r->offset += footer_encoding.size();
     }
   }

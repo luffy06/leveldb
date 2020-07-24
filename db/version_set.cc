@@ -5,7 +5,7 @@
 #include "db/version_set.h"
 
 #include <stdio.h>
-
+#include <iostream>
 #include <algorithm>
 
 #include "db/filename.h"
@@ -263,6 +263,7 @@ static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
   } else {
     uint32_t table_number = DecodeFixed32(file_value.data() + 16);
     uint64_t file_size = DecodeFixed64(file_value.data() + 8);
+    std::cout<<"open: "<<DecodeFixed64(file_value.data())<<" "<<table_number<<std::endl;
     return cache->NewIterator(options, DecodeFixed64(file_value.data()),
                               file_size, table_number);
   }
@@ -408,18 +409,17 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
 
       state->last_file_read = f;
       state->last_file_read_level = level;
-
+      for(int i=0;i<f->table_number;i++){
       state->s = state->vset->table_cache_->Get(*state->options, f->number,
-                                                f->file_size, f->table_number, 
+                                                f->file_size, f->table_number, i,
                                                 state->ikey, &state->saver, 
                                                 SaveValue);
+
       if (!state->s.ok()) {
         state->found = true;
         return false;
       }
       switch (state->saver.state) {
-        case kNotFound:
-          return true;  // Keep searching in other files
         case kFound:
           state->found = true;
           return false;
@@ -431,7 +431,10 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
           state->found = true;
           return false;
       }
-
+      }
+      if(state->saver.state==kNotFound){
+          return true;  // Keep searching in other files
+      }
       // Not reached. Added to avoid false compilation warnings of
       // "control reaches end of non-void function".
       return false;
@@ -447,7 +450,6 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
   state.options = &options;
   state.ikey = k.internal_key();
   state.vset = vset_;
-
   state.saver.state = kNotFound;
   state.saver.ucmp = vset_->icmp_.user_comparator();
   state.saver.user_key = k.user_key();
@@ -475,7 +477,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       min_frequency = std::min(min_frequency, 
                                 files_[state.last_file_read_level][i]->frequency);
     }
-    if (state.last_file_read->frequency > min_frequency * options.floating_rate) {
+    if (state.last_file_read_level && state.last_file_read->frequency > min_frequency * options.floating_rate) {
       file_to_float_ = state.last_file_read;
       file_to_float_level_ = state.last_file_read_level;
     }
@@ -604,6 +606,7 @@ void Version::GetOverlappingInputs(int level, const InternalKey* begin,
       // "f" is completely after specified range; skip it
     } else {
       inputs->push_back(f);
+      Log(vset_->options_->info_log,"compaction file:%d",f->number);
       if (level == 0) {
         // Level-0 files may overlap each other.  So check if the newly
         // added file has expanded the range.  If so, restart search.
@@ -752,6 +755,7 @@ class VersionSet::Builder {
     }
 
     // Add new files
+    Log(vset_->options_->info_log, "newfile :%d",edit->new_files_.size());
     for (size_t i = 0; i < edit->new_files_.size(); i++) {
       const int level = edit->new_files_[i].first;
       FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
@@ -823,6 +827,7 @@ class VersionSet::Builder {
         for (uint32_t i = 0; i < v->files_[level].size(); ++ i) {
           if (v->files_[level][i]->number == modified_file->number) {
             MaybeMergeFile(v->files_[level][i], modified_file);
+            vset_->table_cache_->Evict(v->files_[level][i]->number);
           }
         }
       }
@@ -862,7 +867,7 @@ class VersionSet::Builder {
 
   void MaybeMergeFile(FileMetaData* origin, FileMetaData* merged) {
     origin->allowed_seeks += merged->allowed_seeks;
-    origin->file_size += merged->file_size;
+    origin->file_size = merged->file_size;
     origin->table_number += merged->table_number;
     for (size_t i = 0; i < merged->smallest.size(); ++ i)
       origin->smallest.push_back(merged->smallest[i]);
@@ -1470,6 +1475,7 @@ Flotation* VersionSet::PickFlotation() {
                         current_->file_to_float_level_);
     f->input_version_ = current_;
     f->input_version_->Ref();
+    std::cout<<current_->file_to_float_->number<<std::endl;
   }
   return f;
 }

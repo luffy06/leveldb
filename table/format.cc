@@ -3,7 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "table/format.h"
-
+#include <iostream>
 #include "leveldb/env.h"
 #include "port/port.h"
 #include "table/block.h"
@@ -49,7 +49,9 @@ void FooterList::EncodeTo(std::string* dst) const {
   const size_t original_size = dst->size();
   // Encode all footer
   for (int i = 0; i < handle_list.size(); ++ i) {
-    handle_list[i].EncodeTo(dst);
+     std::string s;
+     handle_list[i].EncodeTo(&s);
+     dst->append(s);
   }
   // Add table number
   PutFixed32(dst, static_cast<uint32_t>(handle_list.size()));
@@ -81,6 +83,7 @@ Status FooterList::DecodeFrom(Slice* input, uint32_t table_number) {
   if (!result.ok()) {
     return result;
   }
+  if(table_number>1) std::cout<<decoded_table_number<<" "<<table_number<<std::endl;
   // Decode each footer
   for (size_t i = 0; i < table_number; ++ i) {
     Footer footer;
@@ -134,7 +137,6 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
       return s;
     }
   }
-
   switch (data[n]) {
     case kNoCompression:
       if (data != buf) {
@@ -156,13 +158,13 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
     case kSnappyCompression: {
       size_t ulength = 0;
       if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
-        delete[] buf;
+        delete[] buf;puts("Y");
         return Status::Corruption("corrupted compressed block contents");
       }
       char* ubuf = new char[ulength];
       if (!port::Snappy_Uncompress(data, n, ubuf)) {
         delete[] buf;
-        delete[] ubuf;
+        delete[] ubuf;puts("C");
         return Status::Corruption("corrupted compressed block contents");
       }
       delete[] buf;
@@ -173,9 +175,10 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
     }
     default:
       delete[] buf;
+      puts("S");
+	std::cout<<handle.offset()<<std::endl;
       return Status::Corruption("bad block type");
   }
-
   return Status::OK();
 }
 

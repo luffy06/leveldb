@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-
+#include <iostream>
 #include <atomic>
 #include <cerrno>
 #include <cstddef>
@@ -549,13 +549,17 @@ class PosixEnv : public Env {
 
   Status NewWritableFile(const std::string& filename, WritableFile** result, 
                           size_t pos = 0) override {
-    int fd = ::open(filename.c_str(),
-                    O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
+    int fd;
+    if(pos) fd = ::open(filename.c_str(),
+                     O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
+    else fd = ::open(filename.c_str(),
+                     O_TRUNC| O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
     if (fd < 0) {
       *result = nullptr;
       return PosixError(filename, errno);
     }
-
+    uint64_t file_size;
+    Status status = GetFileSize(filename, &file_size);
     *result = new PosixWritableFile(filename, fd, pos);
     return Status::OK();
   }

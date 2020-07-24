@@ -3,7 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/table_cache.h"
-
+#include <iostream>
 #include "db/filename.h"
 #include "leveldb/env.h"
 #include "leveldb/table.h"
@@ -59,6 +59,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
+      
+      if(table_number>1) puts("OK");
       s = Table::Open(options_, file, file_size, table_number, &tables);
     }
 
@@ -75,6 +77,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
     }
   }
+  
   return s;
 }
 
@@ -83,7 +86,9 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint32_t& table_number, 
                                   std::vector<Table*>* tableptr) {
   Cache::Handle* handle = nullptr;
+  if(table_number>1) std::cout<<file_number<<" "<<file_size<<std::endl;
   Status s = FindTable(file_number, file_size, table_number, &handle);
+  if(table_number>1) std::cout<<table_number<<std::endl;
   if (tableptr != nullptr) {
     assert(tableptr->size() == table_number);
     for (size_t i = 0; i < tableptr->size(); ++ i) {
@@ -98,6 +103,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
                                                 cache_->Value(handle))->tables;
   std::vector<Iterator*> table_iterators;
   for (int i = 0; i < tables.size(); ++ i) {
+
     Iterator* iter = tables[i]->NewIterator(options);
     table_iterators.push_back(iter);
     iter->RegisterCleanup(&UnrefEntry, cache_, handle);
@@ -137,20 +143,24 @@ Status TableCache::NewEachIterator(const ReadOptions& options,
 }
 
 Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
-                       uint64_t file_size, uint32_t& table_number, 
+                       uint64_t file_size, uint32_t& table_number,const int &i, 
                        const Slice& k, void* arg,
                        void (*handle_result)(void*, const Slice&,
                                              const Slice&)) {
   Cache::Handle* handle = nullptr;
+  if(table_number!=1) std::cout<<"c:"<<file_number<<" "<<file_size<<" "<<i<<std::endl;
   Status s = FindTable(file_number, file_size, table_number, &handle);
   if (s.ok()) {
     std::vector<Table*> t_list = reinterpret_cast<TableAndFile*>(
                                                 cache_->Value(handle))->tables;
-    for (int i = 0; i < t_list.size(); ++ i) {
+    //for (int i = 0; i < t_list.size(); ++ i) 
+{
+      //if(table_number>1)
+      //std::cout<<i<<" "<<t_list.size()<<std::endl;
       // TODO(floating): process it based on the range 
       s = t_list[i]->InternalGet(options, k, arg, handle_result);
-      if (s.ok()) // DEBUG: verify the condition
-        break;
+      //if (s.ok()) // DEBUG: verify the condition
+       // break;
     }
     cache_->Release(handle);
   }

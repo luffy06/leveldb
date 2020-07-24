@@ -3,7 +3,8 @@
 #include "leveldb/cache.h"
 #include "leveldb/db.h"
 #include "util/testutil.h"
-
+#include <vector>
+#include <algorithm>
 namespace leveldb {
 
 class AutoFloatTest : public testing::Test {
@@ -60,10 +61,7 @@ void AutoFloatTest::DoReads(int n) {
   }
 
   // Shuffle keys
-  for (int i = 0; i < kCount; ++ i) {
-    int j = random() % (kCount - i) + i;
-    std::swap(keys[i], keys[j]);
-  }
+  random_shuffle(keys.begin(),keys.end());
 
   // Fill database
   for (int i = 0; i < keys.size(); i++) {
@@ -75,6 +73,7 @@ void AutoFloatTest::DoReads(int n) {
   for (int i = kCount - 1; i >= 0; -- i) {
     for (int j = 0; j < i + 1; ++ j) {
       std::string value_in_db;
+      if(!db_->Get(ReadOptions(), Key(i), &value_in_db).ok()) while(1);
       ASSERT_LEVELDB_OK(db_->Get(ReadOptions(), Key(i), &value_in_db));
       ASSERT_EQ(value, value_in_db);
     }
@@ -84,6 +83,7 @@ void AutoFloatTest::DoReads(int n) {
   for (int i = 0; i < kCount; ++ i) {
     for (int j = 0; j < kCount - i; ++ j) {
       std::string value_in_db;
+      if(!db_->Get(ReadOptions(), Key(i), &value_in_db).ok()) while(1);
       ASSERT_LEVELDB_OK(db_->Get(ReadOptions(), Key(i), &value_in_db));
       ASSERT_EQ(value, value_in_db);
     }

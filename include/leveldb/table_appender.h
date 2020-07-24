@@ -41,6 +41,8 @@ class LEVELDB_EXPORT TableAppender : public TableBuilder {
   uint32_t origin_footerlist_size_;
   uint32_t table_number_;
   RandomAccessFile* readfile_;
+  FooterList footerlist;
+  Status s;
 
 };
 

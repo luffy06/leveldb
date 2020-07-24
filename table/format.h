@@ -75,7 +75,9 @@ class FooterList {
  public:
   FooterList() = default;
 
-  void append_new_footer(const Footer& f) { handle_list.push_back(f); }
+  void append_new_footer(const Footer f) { 
+     handle_list.push_back(f); 
+  }
 
   static uint32_t cal_encoded_length(uint32_t table_number) { 
     return table_number * Footer::kEncodedLength + 12; 
@@ -93,7 +95,7 @@ class FooterList {
   Status DecodeFrom(Slice* input, uint32_t table_number);
   static Status DecodeTrailer(const char* str_ptr, uint32_t& table_number);
 
- private:
+ public:
   std::vector<Footer> handle_list;
 };
 // kTableMagicNumber was picked by running
