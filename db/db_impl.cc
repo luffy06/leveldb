@@ -695,6 +695,7 @@ void DBImpl::RecordBackgroundError(const Status& s) {
 
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
+  //mutex_.Lock();
   if (background_compaction_scheduled_ || background_flotation_scheduled_) {
     // Already scheduled
   } else if (shutting_down_.load(std::memory_order_acquire)) {
@@ -708,6 +709,7 @@ void DBImpl::MaybeScheduleCompaction() {
     background_compaction_scheduled_ = true;
     env_->Schedule(&DBImpl::BGWork, this);
   }
+  //mutex_.Unlock();
 }
 
 void DBImpl::BGWork(void* db) {
@@ -722,7 +724,9 @@ void DBImpl::BackgroundCall() {
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
   } else {
+    //mutex2.Lock();
     BackgroundCompaction();
+    //mutex2.Unlock();
   }
 
   background_compaction_scheduled_ = false;
@@ -892,6 +896,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   if (s.ok() && current_entries > 0) {
     // Verify that the table is usable
     uint32_t table_number = 1;
+    std::cout<<"newcompactionfile"<<output_number<<" "<<current_bytes<<std::endl;
     Iterator* iter =
         table_cache_->NewIterator(ReadOptions(), output_number, current_bytes, 
                                   table_number);
@@ -925,6 +930,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
     compact->compaction->edit()->AddFile(level + 1, out.number, out.file_size, 
                                           1, s, l);
   }
+  puts("finishc");
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
@@ -1051,7 +1057,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
     input->Next();
   }
-
+  puts("NOOOOOO");
   if (status.ok() && shutting_down_.load(std::memory_order_acquire)) {
     status = Status::IOError("Deleting DB during compaction");
   }
@@ -1091,6 +1097,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
 void DBImpl::MaybeScheduleFlotation() {
   mutex_.AssertHeld();
+  //mutex_.Lock();
   if (background_flotation_scheduled_||background_compaction_scheduled_) {
     // Already scheduled
   } else if (shutting_down_.load(std::memory_order_acquire)) {
@@ -1104,6 +1111,7 @@ void DBImpl::MaybeScheduleFlotation() {
        background_compaction_scheduled_ = true;
        env_->Schedule(&DBImpl::BGWorkForFlotation, this);
   }
+  //mutex_.Unlock();
 }
 
 void DBImpl::BGWorkForFlotation(void* db) {
@@ -1118,7 +1126,9 @@ void DBImpl::BackgroundCallForFlotation() {
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
   } else {
+    mutex2.Lock();
     BackgroundFlotation();
+    mutex2.Unlock();
   }
 
   background_compaction_scheduled_ = false;
@@ -1207,6 +1217,7 @@ Status DBImpl::OpenFlotationAppendFile(FlotationState* floating,
   assert(floating != nullptr);
   assert(floating->appender == nullptr);
   std::cout<<"f:"<<file_number<<std::endl;
+  Log(options_.info_log, "float file :%d",file_number);
   std::string fname = TableFileName(dbname_, file_number);
   Status s = env_->NewRandomAccessFile(fname, &floating->readfile);
   if (s.ok()) {
@@ -1269,7 +1280,7 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
       static_cast<long long>(floating->total_bytes));
 
   // Add flotation outputs
-  puts("float");
+  //puts("float");
   floating->flotation->AddInputDeletions(floating->flotation->edit());
   const int level = floating->flotation->level();
   for (size_t i = 0; i < floating->additions.size(); i++) {
@@ -1277,7 +1288,7 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
     std::vector<InternalKey> smallest, largest;
     smallest.push_back(add.smallest);
     largest.push_back(add.largest);
-    std::cout<<"add:"<<add.number<<" "<<add.del<<std::endl;
+    //std::cout<<"add:"<<add.number<<" "<<add.del<<std::endl;
     floating->flotation->edit()->ModifyFile(add.level, add.number, 
                                             add.appending_bytes, smallest, 
                                             largest);
@@ -1336,7 +1347,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     mutex_.Unlock();
     
     ParsedInternalKey ikey;
-    std::cout<<l<<" "<<floating->flotation->num_input_files(l)<<std::endl;
+    //std::cout<<l<<" "<<floating->flotation->num_input_files(l)<<std::endl;
     for (int i = 0, j = 0; i < floating->flotation->num_input_files(l) && 
         index < floating_keys.size() && 
         !shutting_down_.load(std::memory_order_acquire) && 
@@ -1379,7 +1390,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
                         FooterList::cal_encoded_length(fmd->table_number), 
                         FooterList::cal_encoded_length(fmd->table_number),
                         fmd->table_number);
-            std::cout<<fmd->file_size<<std::endl;
+            //std::cout<<fmd->file_size<<std::endl;
             if (!status.ok()) {
               break;
             }
@@ -1398,7 +1409,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
           }
           ++ i;
           continue;
-        }
+        } else  index++,j++;
       }
     }
   }
@@ -1414,7 +1425,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   new_mem->Ref();
   Version* base = versions_->current();
   base->Ref();
-  puts("YES");
+  //puts("YES");
   bool flag=false;
   for (size_t i = 0; i < floating_keys.size(); ++ i) {
     if (!deleted[i]) {
@@ -1430,10 +1441,10 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
       }
     }
   }
-  puts("YES");
+  //puts("YES");
   if(flag)
   Status s = WriteLevel0Table(new_mem, floating->flotation->edit(), base);
-  puts("YES");  
+  //puts("YES");  
   base->Unref();
   new_mem->Unref();
   mutex_.Unlock();
@@ -1446,7 +1457,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
                                 floating->flotation->input(l, i)->table_number);
     }
   }
-  std::cout<<"vec:"<<floating->additions.size()<<std::endl;
+  //std::cout<<"vec:"<<floating->additions.size()<<std::endl;
   for (size_t i = 0; i < floating->additions.size(); i++) {
     stats.bytes_written += floating->additions[i].appending_bytes;
   }
@@ -1457,7 +1468,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   if (status.ok()) {
     status = InstallFlotationResults(floating);
   }
-  puts("!!!!");
+  //puts("!!!!");
   if (!status.ok()) {
     RecordBackgroundError(status);
   }
@@ -1539,10 +1550,10 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   } else {
     snapshot = versions_->LastSequence();
   }
-
   MemTable* mem = mem_;
   MemTable* imm = imm_;
   Version* current = versions_->current();
+  std::cout<<current<<std::endl;
   mem->Ref();
   if (imm != nullptr) imm->Ref();
   current->Ref();
@@ -1559,17 +1570,20 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
+      mutex2.Lock();
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
+      mutex2.Unlock();
     }
     mutex_.Lock();
   }
-
   if (versions_->NeedsFlotation()) {
     MaybeScheduleFlotation();
   }
   if (have_stat_update && current->UpdateStats(stats)) {
+    mutex2.Lock();
     MaybeScheduleCompaction();
+    mutex2.Unlock();
   }
   mem->Unref();
   if (imm != nullptr) imm->Unref();

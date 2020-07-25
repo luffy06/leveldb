@@ -263,7 +263,7 @@ static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
   } else {
     uint32_t table_number = DecodeFixed32(file_value.data() + 16);
     uint64_t file_size = DecodeFixed64(file_value.data() + 8);
-    std::cout<<"open: "<<DecodeFixed64(file_value.data())<<" "<<table_number<<std::endl;
+    std::cout<<"open: "<<DecodeFixed64(file_value.data())<<" "<<std::endl;
     return cache->NewIterator(options, DecodeFixed64(file_value.data()),
                               file_size, table_number);
   }
@@ -606,7 +606,6 @@ void Version::GetOverlappingInputs(int level, const InternalKey* begin,
       // "f" is completely after specified range; skip it
     } else {
       inputs->push_back(f);
-      Log(vset_->options_->info_log,"compaction file:%d",f->number);
       if (level == 0) {
         // Level-0 files may overlap each other.  So check if the newly
         // added file has expanded the range.  If so, restart search.
@@ -940,6 +939,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     Builder builder(this, current_);
     builder.Apply(edit);
     builder.SaveTo(v);
+    Log(options_->info_log,"%llx",v);
   }
   Finalize(v);
 
@@ -1377,6 +1377,12 @@ Iterator* VersionSet::MakeCompactionInputIterator(Compaction* c) {
   Iterator** list = new Iterator*[space];
   int num = 0;
   for (int which = 0; which < 2; which++) {
+      const std::vector<FileMetaData*>& files = c->inputs_[which];
+        for (size_t i = 0; i < files.size(); i++) {
+          Log(options_->info_log,"compaction file :%d #%d %d",which,files[i]->number,files[i]->table_number);
+        }
+  }
+  for (int which = 0; which < 2; which++) {
     if (!c->inputs_[which].empty()) {
       if (c->level() + which == 0) {
         const std::vector<FileMetaData*>& files = c->inputs_[which];
@@ -1475,7 +1481,7 @@ Flotation* VersionSet::PickFlotation() {
                         current_->file_to_float_level_);
     f->input_version_ = current_;
     f->input_version_->Ref();
-    std::cout<<current_->file_to_float_->number<<std::endl;
+    //std::cout<<current_->file_to_float_->number<<std::endl;
   }
   return f;
 }

@@ -208,6 +208,7 @@ class DBImpl : public DB {
 
   // State below is protected by mutex_
   port::Mutex mutex_;
+  port::Mutex mutex2;
   std::atomic<bool> shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
   MemTable* mem_;
