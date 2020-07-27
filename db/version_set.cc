@@ -4,17 +4,18 @@
 
 #include "db/version_set.h"
 
-#include <stdio.h>
-#include <iostream>
-#include <algorithm>
-
 #include "db/filename.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
 #include "db/memtable.h"
 #include "db/table_cache.h"
+#include <algorithm>
+#include <iostream>
+#include <stdio.h>
+
 #include "leveldb/env.h"
 #include "leveldb/table_builder.h"
+
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
@@ -67,19 +68,19 @@ static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
 
 // TODO(floating): Annotation
 Slice VisitQueue::Add(int level, uint64_t file_number) {
-  assert(file_number == 0);
+  assert(file_number != 0);
   std::string fileinfo_encoding;
   std::string pop_fileinfo;
 
   PutVarint32(&fileinfo_encoding, level);
   PutVarint64(&fileinfo_encoding, file_number);
 
-  if (Full()) { // Pop the front file number
+  if (Full()) {  // Pop the front file number
     pop_fileinfo = number_queue_[start_index_];
     number_queue_[end_index_] = fileinfo_encoding;
     end_index_ = end_index_ + 1;
     start_index_ = start_index_ + 1;
-  } else { // The queue is not full, pop nothing
+  } else {  // The queue is not full, pop nothing
     if (Length() == 0) {
       start_index_ = 0;
       end_index_ = 1;
@@ -97,14 +98,11 @@ Slice VisitQueue::Add(int level, uint64_t file_number) {
 
 // TODO(floating): Annotation
 int VisitQueue::Length() {
-  if (start_index_ == -1 && end_index_ == -1)
-    return 0;
+  if (start_index_ == -1 && end_index_ == -1) return 0;
   int offset_ = (end_index_ - start_index_);
-  if (offset_ < 0)
-    offset_ += config::kNumVisitQueue;
+  if (offset_ < 0) offset_ += config::kNumVisitQueue;
   return offset_;
 }
-
 
 Version::~Version() {
   assert(refs_ == 0);
@@ -263,7 +261,7 @@ static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
   } else {
     uint32_t table_number = DecodeFixed32(file_value.data() + 16);
     uint64_t file_size = DecodeFixed64(file_value.data() + 8);
-    std::cout<<"open: "<<DecodeFixed64(file_value.data())<<" "<<std::endl;
+    //std::cout << "open: " << DecodeFixed64(file_value.data()) << " " << std::endl;
     return cache->NewIterator(options, DecodeFixed64(file_value.data()),
                               file_size, table_number);
   }
@@ -281,7 +279,7 @@ void Version::AddIterators(const ReadOptions& options,
   // Merge all level zero files together since they may overlap
   for (size_t i = 0; i < files_[0].size(); i++) {
     iters->push_back(vset_->table_cache_->NewIterator(
-        options, files_[0][i]->number, files_[0][i]->file_size, 
+        options, files_[0][i]->number, files_[0][i]->file_size,
         files_[0][i]->table_number));
   }
 
@@ -409,31 +407,32 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
 
       state->last_file_read = f;
       state->last_file_read_level = level;
-      for(int i=0;i<f->table_number;i++){
-      state->s = state->vset->table_cache_->Get(*state->options, f->number,
-                                                f->file_size, f->table_number, i,
-                                                state->ikey, &state->saver, 
-                                                SaveValue);
+      const Comparator* ucmp = state->vset->icmp_.user_comparator();
+      for (int i = 0; i < f->table_number; i++) {
+        //if (i==0||(ucmp->Compare(state->saver.user_key, f->smallest[i].user_key()) >= 0 && ucmp->Compare(state->saver.user_key, f->largest[i].user_key()) <= 0))
+        state->s = state->vset->table_cache_->Get(
+            *state->options, f->number, f->file_size, f->table_number, i,
+            state->ikey, &state->saver, SaveValue);
 
-      if (!state->s.ok()) {
-        state->found = true;
-        return false;
-      }
-      switch (state->saver.state) {
-        case kFound:
+        if (!state->s.ok()) {
           state->found = true;
           return false;
-        case kDeleted:
-          return false;
-        case kCorrupt:
-          state->s =
-              Status::Corruption("corrupted key for ", state->saver.user_key);
-          state->found = true;
-          return false;
+        }
+        switch (state->saver.state) {
+          case kFound:
+            state->found = true;
+            return false;
+          case kDeleted:
+            return false;
+          case kCorrupt:
+            state->s =
+                Status::Corruption("corrupted key for ", state->saver.user_key);
+            state->found = true;
+            return false;
+        }
       }
-      }
-      if(state->saver.state==kNotFound){
-          return true;  // Keep searching in other files
+      if (state->saver.state == kNotFound) {
+        return true;  // Keep searching in other files
       }
       // Not reached. Added to avoid false compilation warnings of
       // "control reaches end of non-void function".
@@ -458,14 +457,15 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
   ForEachOverlapping(state.saver.user_key, state.ikey, &state, &State::Match);
 
   if (state.found) {
-    UpdateFrequency(state.last_file_read_level, state.last_file_read->number, 1);
-    Slice pop_fileinfo = visit_queue_->Add(state.last_file_read_level, 
-                                                    state.last_file_read->number);
+    UpdateFrequency(state.last_file_read_level, state.last_file_read->number,
+                    1);
+    Slice pop_fileinfo = visit_queue_->Add(state.last_file_read_level,
+                                           state.last_file_read->number);
     if (!pop_fileinfo.empty()) {
       uint32_t pop_level;
       uint64_t pop_number;
-      if (GetVarint32(&pop_fileinfo, &pop_level) 
-        && GetVarint64(&pop_fileinfo, &pop_number)) {
+      if (GetVarint32(&pop_fileinfo, &pop_level) &&
+          GetVarint64(&pop_fileinfo, &pop_number)) {
         UpdateFrequency(pop_level, pop_number, -1);
       } else {
         state.s = Status::Corruption(Slice("Update Frequency Error"));
@@ -473,11 +473,13 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     }
 
     int min_frequency = 0;
-    for (size_t i = 0; i < files_[state.last_file_read_level].size(); ++ i) {
-      min_frequency = std::min(min_frequency, 
-                                files_[state.last_file_read_level][i]->frequency);
+    for (size_t i = 0; i < files_[state.last_file_read_level].size(); ++i) {
+      min_frequency = std::max(
+          min_frequency, files_[state.last_file_read_level][i]->frequency);
     }
-    if (state.last_file_read_level && state.last_file_read->frequency > min_frequency * options.floating_rate) {
+    if (state.last_file_read_level &&
+        state.last_file_read->frequency >
+            min_frequency * options.floating_rate) {
       file_to_float_ = state.last_file_read;
       file_to_float_level_ = state.last_file_read_level;
     }
@@ -646,7 +648,7 @@ std::string Version::DebugString() const {
       assert(files[i]->smallest.size() == files[i]->largest.size());
       AppendNumberTo(&r, files[i]->smallest.size());
       r.append(" ");
-      for (size_t j = 0; j < files[i]->smallest.size(); ++ j) {
+      for (size_t j = 0; j < files[i]->smallest.size(); ++j) {
         r.append("[");
         r.append(files[i]->smallest[j].DebugString());
         r.append(" .. ");
@@ -721,8 +723,8 @@ class VersionSet::Builder {
       const FileSet* modified = levels_[level].modified_files;
       to_unref.clear();
       to_unref.reserve(modified->size());
-      for (FileSet::const_iterator it = modified->begin(); it != modified->end();
-           ++it) {
+      for (FileSet::const_iterator it = modified->begin();
+           it != modified->end(); ++it) {
         to_unref.push_back(*it);
       }
       delete modified;
@@ -754,7 +756,7 @@ class VersionSet::Builder {
     }
 
     // Add new files
-    Log(vset_->options_->info_log, "newfile :%d",edit->new_files_.size());
+    //Log(vset_->options_->info_log, "newfile :%d", edit->new_files_.size());
     for (size_t i = 0; i < edit->new_files_.size(); i++) {
       const int level = edit->new_files_[i].first;
       FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
@@ -781,7 +783,7 @@ class VersionSet::Builder {
     }
 
     // Add modified files
-    for (size_t i = 0; i < edit->modified_files_.size(); ++ i) {
+    for (size_t i = 0; i < edit->modified_files_.size(); ++i) {
       const int level = edit->modified_files_[i].first;
       FileMetaData* f = new FileMetaData(edit->modified_files_[i].second);
       f->refs = 1;
@@ -823,7 +825,7 @@ class VersionSet::Builder {
 
       // Add modified files
       for (const auto& modified_file : *modified_files) {
-        for (uint32_t i = 0; i < v->files_[level].size(); ++ i) {
+        for (uint32_t i = 0; i < v->files_[level].size(); ++i) {
           if (v->files_[level][i]->number == modified_file->number) {
             MaybeMergeFile(v->files_[level][i], modified_file);
             vset_->table_cache_->Evict(v->files_[level][i]->number);
@@ -868,9 +870,9 @@ class VersionSet::Builder {
     origin->allowed_seeks += merged->allowed_seeks;
     origin->file_size = merged->file_size;
     origin->table_number += merged->table_number;
-    for (size_t i = 0; i < merged->smallest.size(); ++ i)
+    for (size_t i = 0; i < merged->smallest.size(); ++i)
       origin->smallest.push_back(merged->smallest[i]);
-    for (size_t i = 0; i < merged->largest.size(); ++ i)
+    for (size_t i = 0; i < merged->largest.size(); ++i)
       origin->largest.push_back(merged->largest[i]);
   }
 };
@@ -939,7 +941,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     Builder builder(this, current_);
     builder.Apply(edit);
     builder.SaveTo(v);
-    Log(options_->info_log,"%llx",v);
+    //Log(options_->info_log, "%llx", v);
   }
   Finalize(v);
 
@@ -1228,8 +1230,8 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
     const std::vector<FileMetaData*>& files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
-      edit.AddFile(level, f->number, f->file_size, f->table_number, 
-                    f->smallest, f->largest);
+      edit.AddFile(level, f->number, f->file_size, f->table_number, f->smallest,
+                   f->largest);
     }
   }
 
@@ -1276,14 +1278,14 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
         // approximate offset of "ikey" within the table.
         std::vector<Table*> tableptr;
         Iterator* iter = table_cache_->NewIterator(
-            ReadOptions(), files[i]->number, files[i]->file_size, 
+            ReadOptions(), files[i]->number, files[i]->file_size,
             files[i]->table_number, &tableptr);
         if (tableptr.size() != 0) {
           bool found = false;
           uint64_t table_offset = 0;
-          for (size_t j = 0; j < files[i]->table_number; ++ j) {
-            table_offset += tableptr[j]->ApproximateOffsetOf(ikey.Encode(), 
-                                                              found);
+          for (size_t j = 0; j < files[i]->table_number; ++j) {
+            table_offset +=
+                tableptr[j]->ApproximateOffsetOf(ikey.Encode(), found);
             if (found) break;
           }
           result += table_offset;
@@ -1377,18 +1379,12 @@ Iterator* VersionSet::MakeCompactionInputIterator(Compaction* c) {
   Iterator** list = new Iterator*[space];
   int num = 0;
   for (int which = 0; which < 2; which++) {
-      const std::vector<FileMetaData*>& files = c->inputs_[which];
-        for (size_t i = 0; i < files.size(); i++) {
-          Log(options_->info_log,"compaction file :%d #%d %d",which,files[i]->number,files[i]->table_number);
-        }
-  }
-  for (int which = 0; which < 2; which++) {
     if (!c->inputs_[which].empty()) {
       if (c->level() + which == 0) {
         const std::vector<FileMetaData*>& files = c->inputs_[which];
         for (size_t i = 0; i < files.size(); i++) {
           list[num++] = table_cache_->NewIterator(options, files[i]->number,
-                                                  files[i]->file_size, 
+                                                  files[i]->file_size,
                                                   files[i]->table_number);
         }
       } else {
@@ -1412,9 +1408,8 @@ Iterator* VersionSet::MakeFlotationIterator(Flotation* f) {
   options.fill_cache = false;
 
   FileMetaData* fmd = f->target_file();
-  Iterator* result = table_cache_->NewIterator(options, fmd->number, 
-                                                fmd->file_size, 
-                                                fmd->table_number);
+  Iterator* result = table_cache_->NewIterator(
+      options, fmd->number, fmd->file_size, fmd->table_number);
   return result;
 }
 
@@ -1476,38 +1471,35 @@ Compaction* VersionSet::PickCompaction() {
 Flotation* VersionSet::PickFlotation() {
   Flotation* f = nullptr;
   if (current_->file_to_float_ != nullptr) {
-    f = new Flotation(options_, 
-                        current_->file_to_float_, 
-                        current_->file_to_float_level_);
+    f = new Flotation(options_, current_->file_to_float_,
+                      current_->file_to_float_level_);
     f->input_version_ = current_;
     f->input_version_->Ref();
-    //std::cout<<current_->file_to_float_->number<<std::endl;
+    // std::cout<<current_->file_to_float_->number<<std::endl;
   }
   return f;
 }
 
 // TODO(floating): Annotation
-void VersionSet::SetupOverlapInput(InternalKey smallest, InternalKey largest, 
-                                    size_t level, Flotation* f) {
-  for (size_t i = 0; i < current_->files_[level].size(); ++ i) {
+void VersionSet::SetupOverlapInput(InternalKey smallest, InternalKey largest,
+                                   size_t level, Flotation* f) {
+  for (size_t i = 0; i < current_->files_[level].size(); ++i) {
     FileMetaData* fmd = current_->files_[level][i];
-    if (!(icmp_.Compare(largest, fmd->smallest[0]) < 0 || 
+    if (!(icmp_.Compare(largest, fmd->smallest[0]) < 0 ||
           icmp_.Compare(smallest, fmd->largest[0]) > 0)) {
       f->inputs_[level].push_back(fmd);
     }
   }
   if (level == 0) {
-    std::sort(f->inputs_[level].begin(), f->inputs_[level].end(), 
+    std::sort(f->inputs_[level].begin(), f->inputs_[level].end(),
               [](FileMetaData* a, FileMetaData* b) {
                 InternalKeyComparator cmp(BytewiseComparator());
                 int smallest_cmp = cmp.Compare(a->smallest[0], b->smallest[0]);
-                if (smallest_cmp != 0)
-                  return smallest_cmp;
+                if (smallest_cmp != 0) return smallest_cmp;
                 return cmp.Compare(a->largest[0], b->largest[0]);
               });
   }
 }
-
 
 // Finds the largest key in a vector of files. Returns true if files it not
 // empty.
@@ -1541,7 +1533,8 @@ FileMetaData* FindSmallestBoundaryFile(
         user_cmp->Compare(f->smallest[0].user_key(), largest_key.user_key()) ==
             0) {
       if (smallest_boundary_file == nullptr ||
-          icmp.Compare(f->smallest[0], smallest_boundary_file->smallest[0]) < 0) {
+          icmp.Compare(f->smallest[0], smallest_boundary_file->smallest[0]) <
+              0) {
         smallest_boundary_file = f;
       }
     }
@@ -1774,7 +1767,7 @@ Flotation::Flotation(const Options* options, FileMetaData* f, int level)
     : level_(level),
       max_output_file_size_(MaxFileSizeForLevel(options, level)),
       input_version_(nullptr),
-      floating_file_(f) {}      
+      floating_file_(f) {}
 
 Flotation::~Flotation() {
   if (input_version_ != nullptr) {
@@ -1793,4 +1786,3 @@ void Flotation::ReleaseInputs() {
   }
 }
 }  // namespace leveldb
-

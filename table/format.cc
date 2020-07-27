@@ -83,7 +83,7 @@ Status FooterList::DecodeFrom(Slice* input, uint32_t table_number) {
   if (!result.ok()) {
     return result;
   }
-  if(table_number>1) std::cout<<decoded_table_number<<" "<<table_number<<std::endl;
+  //if(table_number>1) std::cout<<decoded_table_number<<" "<<table_number<<std::endl;
   // Decode each footer
   for (size_t i = 0; i < table_number; ++ i) {
     Footer footer;
@@ -158,13 +158,13 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
     case kSnappyCompression: {
       size_t ulength = 0;
       if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
-        delete[] buf;puts("Y");
+        delete[] buf;
         return Status::Corruption("corrupted compressed block contents");
       }
       char* ubuf = new char[ulength];
       if (!port::Snappy_Uncompress(data, n, ubuf)) {
         delete[] buf;
-        delete[] ubuf;puts("C");
+        delete[] ubuf;
         return Status::Corruption("corrupted compressed block contents");
       }
       delete[] buf;
@@ -175,8 +175,6 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
     }
     default:
       delete[] buf;
-      puts("S");
-	std::cout<<handle.offset()<<std::endl;
       return Status::Corruption("bad block type");
   }
   return Status::OK();

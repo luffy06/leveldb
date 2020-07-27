@@ -31,9 +31,9 @@ Status TableAppender::InitialFooter(BlockHandle metaindex_block_handle,
   footer.set_metaindex_handle(metaindex_block_handle);
   footer.set_index_handle(index_block_handle);
   footerlist.append_new_footer(footer);
-  std::cout<<"YES:"<<index_block_handle.offset()<<" "<<index_block_handle.size()<<" "<<FileSize()<<std::endl;
+  //std::cout<<"YES:"<<index_block_handle.offset()<<" "<<index_block_handle.size()<<" "<<FileSize()<<std::endl;
   footerlist.EncodeTo(&footer_encoding);
-  std::cout<<footerlist.handle_list.size()<<" "<<footer_encoding.size()<<std::endl;
+  //std::cout<<footerlist.handle_list.size()<<" "<<footer_encoding.size()<<std::endl;
   return s;
 }
 

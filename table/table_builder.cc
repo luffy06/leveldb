@@ -264,9 +264,6 @@ Status TableBuilder::Finish() {
     }
     r->status = r->file->Append(footer_encoding);
     if (r->status.ok()) {
-      if(footer_encoding.size()==92){
-          std::cout<<r->offset<<std::endl;
-      }
       r->offset += footer_encoding.size();
     }
   }

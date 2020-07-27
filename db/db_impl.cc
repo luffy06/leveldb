@@ -896,7 +896,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   if (s.ok() && current_entries > 0) {
     // Verify that the table is usable
     uint32_t table_number = 1;
-    std::cout<<"newcompactionfile"<<output_number<<" "<<current_bytes<<std::endl;
+    //std::cout<<"newcompactionfile"<<output_number<<" "<<current_bytes<<std::endl;
     Iterator* iter =
         table_cache_->NewIterator(ReadOptions(), output_number, current_bytes, 
                                   table_number);
@@ -930,7 +930,6 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
     compact->compaction->edit()->AddFile(level + 1, out.number, out.file_size, 
                                           1, s, l);
   }
-  puts("finishc");
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
@@ -1057,7 +1056,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
     input->Next();
   }
-  puts("NOOOOOO");
   if (status.ok() && shutting_down_.load(std::memory_order_acquire)) {
     status = Status::IOError("Deleting DB during compaction");
   }
@@ -1080,7 +1078,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
-  puts("FINISH");
+  //puts("FINISH");
   mutex_.Lock();
   stats_c_[compact->compaction->level() + 1].Add(stats);
 
@@ -1216,8 +1214,8 @@ Status DBImpl::OpenFlotationAppendFile(FlotationState* floating,
                                       uint32_t& table_number) {
   assert(floating != nullptr);
   assert(floating->appender == nullptr);
-  std::cout<<"f:"<<file_number<<std::endl;
-  Log(options_.info_log, "float file :%d",file_number);
+  //std::cout<<"f:"<<file_number<<std::endl;
+  //Log(options_.info_log, "float file :%d",file_number);
   std::string fname = TableFileName(dbname_, file_number);
   Status s = env_->NewRandomAccessFile(fname, &floating->readfile);
   if (s.ok()) {
@@ -1300,9 +1298,9 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
 Status DBImpl::DoFlotationWork(FlotationState* floating) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
-
-  assert(floating->flotation->smallest().user_key() != nullptr);
-  assert(floating->flotation->largest().user_key() != nullptr);
+  Slice s = floating->flotation->smallest().user_key();
+  assert(floating->flotation->smallest().user_key().data() != nullptr);
+  assert(floating->flotation->largest().user_key().data() != nullptr);
   
   Log(options_.info_log, "Floating file %d from level %d Range: [%s, %s]",
       floating->flotation->target_file()->number,
@@ -1312,7 +1310,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
 
   assert(versions_->NumLevelFiles(floating->flotation->level()) > 0);
   assert(floating->appender == nullptr);
-  assert(floating->outfile == nullptr);
+  assert(floating->appendfile == nullptr);
   if (snapshots_.empty()) {
     floating->smallest_snapshot = versions_->LastSequence();
   } else {
@@ -1398,6 +1396,10 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
             floating->additions.rbegin()->del= FooterList::cal_encoded_length(fmd->table_number);
           }
           // This key should be appended to the file of input[l][i]
+          if (floating->appender->NumEntries() == 0) {
+        	floating->current_addition()->smallest.DecodeFrom(key);
+      	  }
+          floating->current_addition()->largest.DecodeFrom(key);
           floating->appender->Add(key, value);
           //std::cout<<key.data()<<std::endl;
           deleted[j] = true;
@@ -1444,7 +1446,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   //puts("YES");
   if(flag)
   Status s = WriteLevel0Table(new_mem, floating->flotation->edit(), base);
-  //puts("YES");  
+  //puts("YES");
   base->Unref();
   new_mem->Unref();
   mutex_.Unlock();
@@ -1473,7 +1475,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     RecordBackgroundError(status);
   }
   VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log, "floated to: %s", versions_->LevelSummary(&tmp));
+  //Log(options_.info_log, "floated to: %s", versions_->LevelSummary(&tmp));
   return status;
 }
 
@@ -1553,7 +1555,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   MemTable* mem = mem_;
   MemTable* imm = imm_;
   Version* current = versions_->current();
-  std::cout<<current<<std::endl;
+  //std::cout<<current<<std::endl;
   mem->Ref();
   if (imm != nullptr) imm->Ref();
   current->Ref();

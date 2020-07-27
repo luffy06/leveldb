@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <string>
 
 #include "leveldb/comparator.h"
@@ -14,6 +15,7 @@
 #include "leveldb/filter_policy.h"
 #include "leveldb/slice.h"
 #include "leveldb/table_builder.h"
+
 #include "util/coding.h"
 #include "util/logging.h"
 
@@ -154,7 +156,9 @@ class InternalKey {
     return rep_;
   }
 
-  Slice user_key() const { return ExtractUserKey(rep_); }
+  Slice user_key() const {
+    return ExtractUserKey(rep_);
+  }
 
   void SetFrom(const ParsedInternalKey& p) {
     rep_.clear();

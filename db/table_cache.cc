@@ -46,7 +46,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
-  std::cout<<"findtable:"<<file_number<<" "<<file_size<<std::endl;
+  //std::cout<<"findtable:"<<file_number<<" "<<file_size<<std::endl;
   *handle = cache_->Lookup(key);
   if (*handle == nullptr) {
     std::string fname = TableFileName(dbname_, file_number);
@@ -61,7 +61,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
     }
     if (s.ok()) {
       
-      puts("OK");
+      //puts("OK");
       s = Table::Open(options_, file, file_size, table_number, &tables);
     }
 
@@ -87,9 +87,9 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint32_t& table_number, 
                                   std::vector<Table*>* tableptr) {
   Cache::Handle* handle = nullptr;
-  std::cout<<file_number<<" "<<file_size<<std::endl;
+  //std::cout<<file_number<<" "<<file_size<<std::endl;
   Status s = FindTable(file_number, file_size, table_number, &handle);
-  std::cout<<table_number<<std::endl;
+  //std::cout<<table_number<<std::endl;
   if (tableptr != nullptr) {
     assert(tableptr->size() == table_number);
     for (size_t i = 0; i < tableptr->size(); ++ i) {
@@ -106,13 +106,14 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   for (int i = 0; i < tables.size(); ++ i) {
 
     Iterator* iter = tables[i]->NewIterator(options);
+
     table_iterators.push_back(iter);
-    iter->RegisterCleanup(&UnrefEntry, cache_, handle);
   }
   // TODO(floating): Verify that whether the key is encoded with sequence number
   Iterator* result = NewMergingIterator(options_.comparator, 
                                         &table_iterators[0], 
                                         table_iterators.size());
+  result->RegisterCleanup(&UnrefEntry, cache_, handle);
   if (tableptr != nullptr) {
     assert(tableptr->size() == table_number);
     assert(tables.size() == table_number);
@@ -149,9 +150,9 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
                        void (*handle_result)(void*, const Slice&,
                                              const Slice&)) {
   Cache::Handle* handle = nullptr;
-  std::cout<<"c:"<<file_number<<" "<<file_size<<" "<<i<<std::endl;
+  //std::cout<<"c:"<<file_number<<" "<<file_size<<" "<<i<<std::endl;
   Status s = FindTable(file_number, file_size, table_number, &handle);
-  std::cout<<"c++:"<<table_number<<std::endl;
+  //std::cout<<"c++:"<<table_number<<std::endl;
   if (s.ok()) {
     std::vector<Table*> t_list = reinterpret_cast<TableAndFile*>(
                                                 cache_->Value(handle))->tables;

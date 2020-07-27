@@ -63,14 +63,13 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
   if (!s.ok()) return s;
   FooterList footerlist;
   s = footerlist.DecodeFrom(&footerlist_input, table_number);
+  //std::cout<<"footer:"<<footerlist_size<<std::endl;
   if (!s.ok()) return s;
   // Read the index block
   for (size_t i = 0; i < table_number; ++ i) {
     Footer footer = footerlist.get(i);
     BlockContents index_block_contents;
     if (s.ok()) {
-      if(table_number>1)
-      std::cout<<i<<std::endl;
       ReadOptions opt;
       if (options.paranoid_checks) {
         opt.verify_checksums = true;
@@ -79,8 +78,8 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     }
    
     if (s.ok()) {
-      if(table_number>1)
-      std::cout<<i<<std::endl;
+      //if(table_number>1)
+      //std::cout<<i<<std::endl;
       // We've successfully read the footer and the index block: we're
       // ready to serve requests.
       Block* index_block = new Block(index_block_contents);
