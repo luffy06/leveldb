@@ -70,7 +70,7 @@ static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
 Slice VisitQueue::Add(uint32_t level, uint64_t file_number) {
   assert(file_number != 0);
   std::string fileinfo_encoding;
-  std::string pop_fileinfo="";
+  std::string pop_fileinfo = "";
 
   PutVarint32(&fileinfo_encoding, level);
   PutVarint64(&fileinfo_encoding, file_number);
@@ -261,7 +261,8 @@ static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
   } else {
     uint32_t table_number = DecodeFixed32(file_value.data() + 16);
     uint64_t file_size = DecodeFixed64(file_value.data() + 8);
-    //std::cout << "open: " << DecodeFixed64(file_value.data()) << " " << std::endl;
+    // std::cout << "open: " << DecodeFixed64(file_value.data()) << " " <<
+    // std::endl;
     return cache->NewIterator(options, DecodeFixed64(file_value.data()),
                               file_size, table_number);
   }
@@ -379,7 +380,8 @@ void Version::UpdateFrequency(size_t level, uint64_t file_number, int add) {
 }
 
 Status Version::Get(const ReadOptions& options, const LookupKey& k,
-                    std::string* value, GetStats* stats,std::queue<std::pair<int,uint64_t> > &q) {
+                    std::string* value, GetStats* stats,
+                    std::queue<std::pair<int, uint64_t> >& q) {
   stats->seek_file = nullptr;
   stats->seek_file_level = -1;
 
@@ -409,7 +411,9 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       state->last_file_read_level = level;
       const Comparator* ucmp = state->vset->icmp_.user_comparator();
       for (int i = 0; i < f->table_number; i++) {
-        //if (i==0||(ucmp->Compare(state->saver.user_key, f->smallest[i].user_key()) >= 0 && ucmp->Compare(state->saver.user_key, f->largest[i].user_key()) <= 0))
+        // if (i==0||(ucmp->Compare(state->saver.user_key,
+        // f->smallest[i].user_key()) >= 0 &&
+        // ucmp->Compare(state->saver.user_key, f->largest[i].user_key()) <= 0))
         state->s = state->vset->table_cache_->Get(
             *state->options, f->number, f->file_size, f->table_number, i,
             state->ikey, &state->saver, SaveValue);
@@ -475,28 +479,31 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
         state.s = Status::Corruption(Slice("Update Frequency Error"));
       }
     }*/
-    if(q.size() == config::kNumVisitQueue){
-       std::pair<int,uint64_t> p = q.front();q.pop();
-       if(p.first<0||p.first>=config::kNumLevels){
-          state.s = Status::Corruption(Slice("Update Frequency Error"));
-       }
-       else{
-          UpdateFrequency(p.first, p.second, -1);
-       }
+    if (q.size() == config::kNumVisitQueue) {
+      std::pair<int, uint64_t> p = q.front();
+      q.pop();
+      if (p.first < 0 || p.first >= config::kNumLevels) {
+        state.s = Status::Corruption(Slice("Update Frequency Error"));
+      } else {
+        UpdateFrequency(p.first, p.second, -1);
+      }
     }
-    q.push(std::make_pair(state.last_file_read_level,state.last_file_read->number));
+    q.push(std::make_pair(state.last_file_read_level,
+                          state.last_file_read->number));
     int min_frequency = 0;
     int sum = 0;
     for (size_t i = 0; i < files_[state.last_file_read_level].size(); ++i) {
-      if(min_frequency == 0) min_frequency = files_[state.last_file_read_level][i]->frequency ;
-      else 
-      min_frequency = std::min(
-          min_frequency, files_[state.last_file_read_level][i]->frequency);
-      sum + = files_[state.last_file_read_level][i]->frequency;
+      if (min_frequency == 0)
+        min_frequency = files_[state.last_file_read_level][i]->frequency;
+      else
+        min_frequency = std::min(
+            min_frequency, files_[state.last_file_read_level][i]->frequency);
+      //sum += files_[state.last_file_read_level][i]->frequency;
     }
-    if (state.last_file_read_level &&
-        state.last_file_read->frequency >
-            min_frequency * options.floating_rate[state.last_file_read_level]) {
+    // min_frequency * options.floating_rate[state.last_file_read_level]
+    // sum * options.sum_rate[state.last_file_read_level]
+    if ( state.last_file_read_level &&
+        state.last_file_read->frequency >= min_frequency * options.floating_rate[state.last_file_read_level]) {
       file_to_float_ = state.last_file_read;
       file_to_float_level_ = state.last_file_read_level;
     }
@@ -773,7 +780,7 @@ class VersionSet::Builder {
     }
 
     // Add new files
-    //Log(vset_->options_->info_log, "newfile :%d", edit->new_files_.size());
+    // Log(vset_->options_->info_log, "newfile :%d", edit->new_files_.size());
     for (size_t i = 0; i < edit->new_files_.size(); i++) {
       const int level = edit->new_files_[i].first;
       FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
@@ -958,7 +965,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     Builder builder(this, current_);
     builder.Apply(edit);
     builder.SaveTo(v);
-    //Log(options_->info_log, "%llx", v);
+    // Log(options_->info_log, "%llx", v);
   }
   Finalize(v);
 

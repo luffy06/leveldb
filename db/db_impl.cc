@@ -1280,7 +1280,6 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
   // Add flotation outputs
   //puts("float");
   floating->flotation->AddInputDeletions(floating->flotation->edit());
-  const int level = floating->flotation->level();
   for (size_t i = 0; i < floating->additions.size(); i++) {
     const FlotationState::Addition& add = floating->additions[i];
     std::vector<InternalKey> smallest, largest;
@@ -1332,7 +1331,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     input->Next();
   }
   delete input;
-
+  FileMetaData* fmd;
   mutex_.Unlock();
   for (int l = floating->flotation->level() - 1; l > 0; -- l) {
     InternalKey smallest, largest;
@@ -1381,7 +1380,7 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
               floating->flotation->input(l, i)->smallest[0].user_key()) >= 0) {
           
           if (floating->appender == nullptr) {
-            FileMetaData* fmd = floating->flotation->input(l, i);
+            fmd = floating->flotation->input(l, i);
             status = OpenFlotationAppendFile(floating, fmd->number,
                         fmd->file_size - 
                         FooterList::cal_encoded_length(fmd->table_number), 
@@ -1392,7 +1391,6 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
               break;
             }
             floating->additions.rbegin()->level= l ;
-            floating->additions.rbegin()->del= FooterList::cal_encoded_length(fmd->table_number);
           }
           // This key should be appended to the file of input[l][i]
           if (floating->appender->NumEntries() == 0) {
@@ -1419,9 +1417,11 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
     status = Status::IOError("Deleting DB during flotation");
   }
   if (status.ok() && floating->appender != nullptr) {
-    FinishFlotationAppendFile(floating);
+    status = FinishFlotationAppendFile(floating);
   }
   //float to mem
+  if(status.ok())
+  status = MakeRoomForWrite(true);
   SequenceNumber snapshot = floating->smallest_snapshot;
   mutex_.Lock();
   MemTable* mem = mem_;
@@ -1606,12 +1606,12 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
-      mutex2.Lock();
+      //mutex2.Lock();
       s = current->Get(options, lkey, value, &stats,que);
       r += current->r;
       read += value->size() + key.size();
       have_stat_update = true;
-      mutex2.Unlock();
+      //mutex2.Unlock();
     }
     mutex_.Lock();
   }
@@ -1619,9 +1619,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     MaybeScheduleFlotation();
   }
   if (have_stat_update && current->UpdateStats(stats)) {
-    mutex2.Lock();
     MaybeScheduleCompaction();
-    mutex2.Unlock();
   }
   mem->Unref();
   if (imm != nullptr) imm->Unref();
@@ -1795,7 +1793,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 // REQUIRES: this thread is currently at the front of the writer queue
 Status DBImpl::MakeRoomForWrite(bool force) {
   mutex_.AssertHeld();
-  assert(!writers_.empty());
+  //assert(!writers_.empty());
   bool allow_delay = !force;
   Status s;
   while (true) {
