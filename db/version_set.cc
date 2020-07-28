@@ -67,10 +67,10 @@ static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
 }
 
 // TODO(floating): Annotation
-Slice VisitQueue::Add(int level, uint64_t file_number) {
+Slice VisitQueue::Add(uint32_t level, uint64_t file_number) {
   assert(file_number != 0);
   std::string fileinfo_encoding;
-  std::string pop_fileinfo;
+  std::string pop_fileinfo="";
 
   PutVarint32(&fileinfo_encoding, level);
   PutVarint64(&fileinfo_encoding, file_number);
@@ -100,7 +100,7 @@ Slice VisitQueue::Add(int level, uint64_t file_number) {
 int VisitQueue::Length() {
   if (start_index_ == -1 && end_index_ == -1) return 0;
   int offset_ = (end_index_ - start_index_);
-  if (offset_ < 0) offset_ += config::kNumVisitQueue;
+  if (offset_ < 0) offset_ += config::kNumVisitQueue + 1;
   return offset_;
 }
 
@@ -379,7 +379,7 @@ void Version::UpdateFrequency(size_t level, uint64_t file_number, int add) {
 }
 
 Status Version::Get(const ReadOptions& options, const LookupKey& k,
-                    std::string* value, GetStats* stats) {
+                    std::string* value, GetStats* stats,std::queue<std::pair<int,uint64_t> > &q) {
   stats->seek_file = nullptr;
   stats->seek_file_level = -1;
 
@@ -413,12 +413,14 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
         state->s = state->vset->table_cache_->Get(
             *state->options, f->number, f->file_size, f->table_number, i,
             state->ikey, &state->saver, SaveValue);
-
+        state->vset->r += state->vset->table_cache_->r;
         if (!state->s.ok()) {
           state->found = true;
           return false;
         }
         switch (state->saver.state) {
+          case kNotFound:
+            break;
           case kFound:
             state->found = true;
             return false;
@@ -449,17 +451,19 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
   state.options = &options;
   state.ikey = k.internal_key();
   state.vset = vset_;
+  state.vset->r = 0;
   state.saver.state = kNotFound;
   state.saver.ucmp = vset_->icmp_.user_comparator();
   state.saver.user_key = k.user_key();
   state.saver.value = value;
 
   ForEachOverlapping(state.saver.user_key, state.ikey, &state, &State::Match);
-
+  r = state.vset->r;
   if (state.found) {
     UpdateFrequency(state.last_file_read_level, state.last_file_read->number,
                     1);
-    Slice pop_fileinfo = visit_queue_->Add(state.last_file_read_level,
+
+    /*Slice pop_fileinfo = visit_queue_->Add(state.last_file_read_level,
                                            state.last_file_read->number);
     if (!pop_fileinfo.empty()) {
       uint32_t pop_level;
@@ -470,16 +474,29 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       } else {
         state.s = Status::Corruption(Slice("Update Frequency Error"));
       }
+    }*/
+    if(q.size() == config::kNumVisitQueue){
+       std::pair<int,uint64_t> p = q.front();q.pop();
+       if(p.first<0||p.first>=config::kNumLevels){
+          state.s = Status::Corruption(Slice("Update Frequency Error"));
+       }
+       else{
+          UpdateFrequency(p.first, p.second, -1);
+       }
     }
-
+    q.push(std::make_pair(state.last_file_read_level,state.last_file_read->number));
     int min_frequency = 0;
+    int sum = 0;
     for (size_t i = 0; i < files_[state.last_file_read_level].size(); ++i) {
-      min_frequency = std::max(
+      if(min_frequency == 0) min_frequency = files_[state.last_file_read_level][i]->frequency ;
+      else 
+      min_frequency = std::min(
           min_frequency, files_[state.last_file_read_level][i]->frequency);
+      sum + = files_[state.last_file_read_level][i]->frequency;
     }
     if (state.last_file_read_level &&
         state.last_file_read->frequency >
-            min_frequency * options.floating_rate) {
+            min_frequency * options.floating_rate[state.last_file_read_level]) {
       file_to_float_ = state.last_file_read;
       file_to_float_level_ = state.last_file_read_level;
     }

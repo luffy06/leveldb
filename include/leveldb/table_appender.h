@@ -36,7 +36,7 @@ class LEVELDB_EXPORT TableAppender : public TableBuilder {
   Status InitialFooter(BlockHandle metaindex_block_handle, 
                         BlockHandle index_block_handle,
                         std::string& footer_encoding) override;
-
+ public:
   uint64_t origin_footerlist_offset_;
   uint32_t origin_footerlist_size_;
   uint32_t table_number_;

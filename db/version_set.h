@@ -18,7 +18,7 @@
 #include <map>
 #include <set>
 #include <vector>
-
+#include <queue>
 #include "db/dbformat.h"
 #include "db/version_edit.h"
 #include "port/port.h"
@@ -67,7 +67,7 @@ class VisitQueue {
 
   int Length();
 
-  Slice Add(int level, uint64_t file_number);
+  Slice Add(uint32_t level, uint64_t file_number);
 
  private:
   std::string number_queue_[config::kNumVisitQueue + 1];
@@ -84,14 +84,14 @@ class Version {
     FileMetaData* seek_file;
     int seek_file_level;
   };
-
+  uint64_t r;
   // Append to *iters a sequence of iterators that will
   // yield the contents of this Version when merged together.
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
-             GetStats* stats);
+             GetStats* stats,std::queue<std::pair<int,uint64_t> > &q);
 
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.
@@ -199,7 +199,7 @@ class VersionSet {
              TableCache* table_cache, const InternalKeyComparator*);
   VersionSet(const VersionSet&) = delete;
   VersionSet& operator=(const VersionSet&) = delete;
-
+  uint64_t r;
   ~VersionSet();
 
   // Apply *edit to the current version to form a new descriptor that

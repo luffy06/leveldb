@@ -24,7 +24,7 @@ class TableCache {
  public:
   TableCache(const std::string& dbname, const Options& options, int entries);
   ~TableCache();
-
+  uint64_t r=0;
   // Return an iterator for the specified file number (the corresponding
   // file length must be exactly "file_size" bytes).  If "tableptr" is
   // non-null, also sets "*tableptr" to point to the Table object

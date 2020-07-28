@@ -19,7 +19,7 @@ class Block {
  public:
   // Initialize the block with the specified contents.
   explicit Block(const BlockContents& contents);
-
+  uint64_t r;
   Block(const Block&) = delete;
   Block& operator=(const Block&) = delete;
 

@@ -92,6 +92,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
       rep->filter_data = nullptr;
       rep->filter = nullptr;
       Table* table = new Table(rep);
+      (table)->r = index_block->r;
       table->ReadMeta(footer);
       tables->push_back(table);
     }
@@ -116,7 +117,7 @@ void Table::ReadMeta(const Footer& footer) {
     return;
   }
   Block* meta = new Block(contents);
-
+  r += meta->r;
   Iterator* iter = meta->NewIterator(BytewiseComparator());
   std::string key = "filter.";
   key.append(rep_->options.filter_policy->Name());
@@ -148,6 +149,7 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
   if (block.heap_allocated) {
     rep_->filter_data = block.data.data();  // Will need to delete later
   }
+  r +=block.data.size();
   rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
 }
 
@@ -193,10 +195,11 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
       cache_handle = block_cache->Lookup(key);
       if (cache_handle != nullptr) {
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
+        table->r += block->r;
       } else {
         s = ReadBlock(table->rep_->file, options, handle, &contents);
         if (s.ok()) {
-          block = new Block(contents);
+          block = new Block(contents);table->r += block->r;
           if (contents.cachable && options.fill_cache) {
             cache_handle = block_cache->Insert(key, block, block->size(),
                                                &DeleteCachedBlock);
@@ -206,7 +209,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
     } else {
       s = ReadBlock(table->rep_->file, options, handle, &contents);
       if (s.ok()) {
-        block = new Block(contents);
+        block = new Block(contents);table->r += block->r;
       }
     }
   }

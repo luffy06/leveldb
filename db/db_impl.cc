@@ -186,7 +186,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       background_flotation_scheduled_(false),
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
-                               &internal_comparator_)) {}
+                               &internal_comparator_)) {wi=r=read=write=0;while(!que.empty()) que.pop();}
 
 DBImpl::~DBImpl() {
   // Wait for background work to finish.
@@ -196,7 +196,8 @@ DBImpl::~DBImpl() {
     background_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
-
+  std::cout<<r<<" "<<read<<std::endl;
+  std::cout<<wi<<" "<<write<<std::endl;
   if (db_lock_ != nullptr) {
     env_->UnlockFile(db_lock_);
   }
@@ -566,6 +567,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   if (s.ok() && meta.file_size > 0) {
     const Slice min_user_key = meta.smallest[0].user_key();
     const Slice max_user_key = meta.largest[0].user_key();
+    wi += meta.file_size;
     meta.table_number = 1;
     if (base != nullptr) {
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
@@ -918,7 +920,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
       compact->compaction->num_input_files(0), compact->compaction->level(),
       compact->compaction->num_input_files(1), compact->compaction->level() + 1,
       static_cast<long long>(compact->total_bytes));
-
+  wi += compact->total_bytes;
   // Add compaction outputs
   compact->compaction->AddInputDeletions(compact->compaction->edit());
   const int level = compact->compaction->level();
@@ -1078,7 +1080,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
-  //puts("FINISH");
   mutex_.Lock();
   stats_c_[compact->compaction->level() + 1].Add(stats);
 
@@ -1147,7 +1148,6 @@ void DBImpl::BackgroundFlotation() {
   }
 
   Flotation* f = versions_->PickFlotation();
-  
   Status status;
   if (f == nullptr) {
     // Nothing to do
@@ -1250,7 +1250,7 @@ Status DBImpl::FinishFlotationAppendFile(FlotationState* floating) {
   }
   const uint64_t current_bytes = floating->appender->FileSize();
   floating->current_addition()->appending_bytes = current_bytes;
-  floating->total_bytes += current_bytes;
+  floating->total_bytes += current_bytes - floating->appender->origin_footerlist_offset_;
   delete floating->appender;
   floating->appender = nullptr;
   // Finish and check for file errors
@@ -1276,7 +1276,7 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
       floating->flotation->smallest().user_key().ToString().data(),
       floating->flotation->largest().user_key().ToString().data(), 
       static_cast<long long>(floating->total_bytes));
-
+  wi += floating->total_bytes;
   // Add flotation outputs
   //puts("float");
   floating->flotation->AddInputDeletions(floating->flotation->edit());
@@ -1298,7 +1298,6 @@ Status DBImpl::InstallFlotationResults(FlotationState* floating) {
 Status DBImpl::DoFlotationWork(FlotationState* floating) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
-  Slice s = floating->flotation->smallest().user_key();
   assert(floating->flotation->smallest().user_key().data() != nullptr);
   assert(floating->flotation->largest().user_key().data() != nullptr);
   
@@ -1422,12 +1421,50 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
   if (status.ok() && floating->appender != nullptr) {
     FinishFlotationAppendFile(floating);
   }
+  //float to mem
+  SequenceNumber snapshot = floating->smallest_snapshot;
   mutex_.Lock();
-  MemTable* new_mem = new MemTable(internal_comparator_);
+  MemTable* mem = mem_;
+  MemTable* imm = imm_;
+  mem->Ref();
+  Version* current = versions_->current();
+  current->Ref();
+  if (imm != nullptr) imm->Ref();
+  for (size_t i = 0; i < floating_keys.size(); ++ i) {
+    if (!deleted[i]) {
+      Slice key = floating_keys[i].first;
+      Slice value = floating_keys[i].second;
+      std::string v;
+      ParsedInternalKey ikey;
+      if (!ParseInternalKey(key, &ikey)) {
+        // Nothing to do
+      } else {
+        mutex_.Unlock();
+    // First look in the memtable, then in the immutable memtable (if any).
+   	 LookupKey lkey(key, snapshot);
+    	 if (imm != nullptr && imm->Get(lkey, &v, &status)) {
+      // Done
+           mutex_.Lock();
+   	 }
+         else if (mem->Get(lkey, &v, &status)) {
+     		 // Done
+           mutex_.Lock();
+   	 }
+	 else{
+           mutex_.Lock();
+           mem->Add(ikey.sequence, ikey.type, ikey.user_key, value);
+         }
+         
+      }
+    }
+  }
+  mem->Unref();
+  if (imm != nullptr) imm->Unref();
+  current->Unref();
+  /*MemTable* new_mem = new MemTable(internal_comparator_);
   new_mem->Ref();
   Version* base = versions_->current();
   base->Ref();
-  //puts("YES");
   bool flag=false;
   for (size_t i = 0; i < floating_keys.size(); ++ i) {
     if (!deleted[i]) {
@@ -1443,13 +1480,11 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
       }
     }
   }
-  //puts("YES");
   if(flag)
   Status s = WriteLevel0Table(new_mem, floating->flotation->edit(), base);
-  //puts("YES");
   base->Unref();
-  new_mem->Unref();
-  mutex_.Unlock();
+  new_mem->Unref();*/
+  //mutex_.Unlock();
   
   FlotationStats stats;
   stats.micros = env_->NowMicros() - start_micros - imm_micros;
@@ -1459,12 +1494,11 @@ Status DBImpl::DoFlotationWork(FlotationState* floating) {
                                 floating->flotation->input(l, i)->table_number);
     }
   }
-  //std::cout<<"vec:"<<floating->additions.size()<<std::endl;
   for (size_t i = 0; i < floating->additions.size(); i++) {
     stats.bytes_written += floating->additions[i].appending_bytes;
   }
 
-  mutex_.Lock();
+  //mutex_.Lock();
   stats_f_[floating->flotation->level()].Add(stats);
 
   if (status.ok()) {
@@ -1573,7 +1607,9 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
       // Done
     } else {
       mutex2.Lock();
-      s = current->Get(options, lkey, value, &stats);
+      s = current->Get(options, lkey, value, &stats,que);
+      r += current->r;
+      read += value->size() + key.size();
       have_stat_update = true;
       mutex2.Unlock();
     }
@@ -1624,6 +1660,7 @@ void DBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
 
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
+  write +=key.size()+val.size();
   return DB::Put(o, key, val);
 }
 

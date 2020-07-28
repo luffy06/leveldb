@@ -164,7 +164,7 @@ struct LEVELDB_EXPORT ReadOptions {
   const Snapshot* snapshot = nullptr;
 
   // TODO(floating): Annotation
-  double floating_rate = 2.;
+  double floating_rate[8] = {0,100,70,45,30,17,8,3};
 };
 
 // Options that control write operations

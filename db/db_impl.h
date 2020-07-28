@@ -9,7 +9,7 @@
 #include <deque>
 #include <set>
 #include <string>
-
+#include <queue>
 #include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/snapshot.h"
@@ -17,7 +17,7 @@
 #include "leveldb/env.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
-
+#include <queue>
 namespace leveldb {
 
 class MemTable;
@@ -29,7 +29,7 @@ class VersionSet;
 class DBImpl : public DB {
  public:
   DBImpl(const Options& options, const std::string& dbname);
-
+  uint64_t r,wi,write,read;
   DBImpl(const DBImpl&) = delete;
   DBImpl& operator=(const DBImpl&) = delete;
 
@@ -205,7 +205,7 @@ class DBImpl : public DB {
 
   // Lock over the persistent DB state.  Non-null iff successfully acquired.
   FileLock* db_lock_;
-
+  std::queue<std::pair<int,uint64_t> > que;
   // State below is protected by mutex_
   port::Mutex mutex_;
   port::Mutex mutex2;

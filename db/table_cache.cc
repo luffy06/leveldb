@@ -9,7 +9,7 @@
 #include "leveldb/table.h"
 #include "table/merger.h"
 #include "util/coding.h"
-
+#include "table/format.h"
 namespace leveldb {
 
 struct TableAndFile {
@@ -60,7 +60,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
-      
+      r += FooterList::cal_encoded_length(table_number);
       //puts("OK");
       s = Table::Open(options_, file, file_size, table_number, &tables);
     }
@@ -151,6 +151,7 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
                                              const Slice&)) {
   Cache::Handle* handle = nullptr;
   //std::cout<<"c:"<<file_number<<" "<<file_size<<" "<<i<<std::endl;
+  r = 0;
   Status s = FindTable(file_number, file_size, table_number, &handle);
   //std::cout<<"c++:"<<table_number<<std::endl;
   if (s.ok()) {
@@ -162,6 +163,8 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
       //std::cout<<i<<" "<<t_list.size()<<std::endl;
       // TODO(floating): process it based on the range 
       s = t_list[i]->InternalGet(options, k, arg, handle_result);
+      r += t_list[i]->r;
+      t_list[i]->r=0;
       //if (s.ok()) // DEBUG: verify the condition
        // break;
     }

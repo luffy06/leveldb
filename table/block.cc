@@ -37,6 +37,7 @@ Block::Block(const BlockContents& contents)
       restart_offset_ = size_ - (1 + NumRestarts()) * sizeof(uint32_t);
     }
   }
+  r = size_;
 }
 
 Block::~Block() {

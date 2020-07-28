@@ -46,7 +46,7 @@ class LEVELDB_EXPORT Table {
 
   Table(const Table&) = delete;
   Table& operator=(const Table&) = delete;
-
+  uint64_t r;
   ~Table();
 
   // Returns a new iterator over the table contents.
