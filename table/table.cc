@@ -62,6 +62,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
                         &footerlist_input, footerlist_space);
   if (!s.ok()) return s;
   FooterList footerlist;
+  //if(table_number>1) std::cout<<footerlist_size<<std::endl;
   s = footerlist.DecodeFrom(&footerlist_input, table_number);
   //std::cout<<"footer:"<<footerlist_size<<std::endl;
   if (!s.ok()) return s;
@@ -238,6 +239,8 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*handle_result)(void*, const Slice&,
                                                 const Slice&)) {
   Status s;
+  //r = 0;
+  //r += rep_->index_block->r;
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
   iiter->Seek(k);
   if (iiter->Valid()) {

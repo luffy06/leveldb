@@ -177,7 +177,7 @@ class DBImpl : public DB {
   Status DoFlotationWork(FlotationState* floating)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  void GetFlotationIteratorRange(std::vector<std::pair<std::string, std::string>> kvs, 
+  bool GetFlotationIteratorRange(std::vector<std::pair<std::string, std::string>> kvs, 
                                   std::vector<bool> deleted, 
                                   InternalKey& smallest, InternalKey& largest);
   Status OpenFlotationAppendFile(FlotationState* floating, uint64_t file_number, 

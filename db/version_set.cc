@@ -410,10 +410,11 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       state->last_file_read = f;
       state->last_file_read_level = level;
       const Comparator* ucmp = state->vset->icmp_.user_comparator();
-      for (int i = 0; i < f->table_number; i++) {
-        // if (i==0||(ucmp->Compare(state->saver.user_key,
-        // f->smallest[i].user_key()) >= 0 &&
-        // ucmp->Compare(state->saver.user_key, f->largest[i].user_key()) <= 0))
+      uint64_t tn = f->table_number;
+      for (int i = 0; i < tn; i++) {
+         //if (i==0||(ucmp->Compare(state->saver.user_key,
+         //f->smallest[i].user_key()) >= 0 &&
+         //ucmp->Compare(state->saver.user_key, f->largest[i].user_key()) <= 0))
         state->s = state->vset->table_cache_->Get(
             *state->options, f->number, f->file_size, f->table_number, i,
             state->ikey, &state->saver, SaveValue);
@@ -498,12 +499,12 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       else
         min_frequency = std::min(
             min_frequency, files_[state.last_file_read_level][i]->frequency);
-      //sum += files_[state.last_file_read_level][i]->frequency;
+      // sum += files_[state.last_file_read_level][i]->frequency;
     }
     // min_frequency * options.floating_rate[state.last_file_read_level]
     // sum * options.sum_rate[state.last_file_read_level]
-    if ( state.last_file_read_level &&
-        state.last_file_read->frequency >= min_frequency * options.floating_rate[state.last_file_read_level]) {
+    //&&state.last_file_read->frequency >= min_frequency *options.floating_rate[state.last_file_read_level]
+    if (state.last_file_read_level&&state.last_file_read->frequency > min_frequency *options.floating_rate[state.last_file_read_level]) {
       file_to_float_ = state.last_file_read;
       file_to_float_level_ = state.last_file_read_level;
     }
